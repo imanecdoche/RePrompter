@@ -111,6 +111,11 @@ export default function PrompterDisplay({
 
   const getFocalHighlightClasses = (isActive: boolean) => {
     if (!isActive) {
+      if (mode === PrompterMode.TICKER && visualConfig.tickerType === "flat") {
+        return visualConfig.theme === "classic-light"
+          ? "text-neutral-700 opacity-90 transition-all duration-200"
+          : "text-neutral-300 opacity-90 transition-all duration-200";
+      }
       return visualConfig.theme === "classic-light"
         ? "text-neutral-400 opacity-40 transition-all duration-200"
         : "text-neutral-500 opacity-30 transition-all duration-200";
@@ -128,6 +133,10 @@ export default function PrompterDisplay({
       default:
         highlightStyle = "";
         break;
+    }
+
+    if (mode === PrompterMode.TICKER && visualConfig.tickerType === "flat") {
+      return `font-bold ${highlightStyle} transition-all duration-200`;
     }
 
     return `font-bold ${highlightStyle} scale-105 transition-all duration-200`;
@@ -286,7 +295,9 @@ export default function PrompterDisplay({
               className="w-full flex items-center overflow-x-hidden py-4 scroll-smooth whitespace-nowrap"
             >
               {/* Focal guide lines for center alignment */}
-              <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-emerald-500/40 pointer-events-none" />
+              {visualConfig.tickerType !== "flat" && (
+                <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-emerald-500/40 pointer-events-none" />
+              )}
               
               <div className="flex gap-6 md:gap-10 px-[50%]" id="ticker-word-track">
                 {words.map((w) => {
@@ -299,14 +310,22 @@ export default function PrompterDisplay({
                       ref={isWordRef}
                       id={`ticker-word-token-${w.index}`}
                       style={
-                        isWordActive
+                        visualConfig.tickerType === "flat"
                           ? {
                               fontSize: `${visualConfig.fontSize}px`,
-                              color: w.isHold && isHolding ? "#f87171" : visualConfig.highlightColor
+                              color: isWordActive
+                                ? (w.isHold && isHolding ? "#f87171" : visualConfig.highlightColor)
+                                : undefined
                             }
-                          : {
-                              fontSize: `${visualConfig.fontSize * 0.85}px`
-                            }
+                          : (isWordActive
+                              ? {
+                                  fontSize: `${visualConfig.fontSize}px`,
+                                  color: w.isHold && isHolding ? "#f87171" : visualConfig.highlightColor
+                                }
+                              : {
+                                  fontSize: `${visualConfig.fontSize * 0.85}px`
+                                }
+                            )
                       }
                       className={`${getFocalHighlightClasses(isWordActive)} inline-block transition-all`}
                     >

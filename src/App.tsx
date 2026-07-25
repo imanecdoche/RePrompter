@@ -19,7 +19,9 @@ import {
   Sparkles,
   Zap,
   HelpCircle,
-  Clock
+  Clock,
+  Maximize,
+  Minimize
 } from "lucide-react";
 
 import { PrompterMode, VisualConfig } from "./types";
@@ -29,7 +31,7 @@ import ScriptEditor from "./components/ScriptEditor";
 import PrompterDisplay from "./components/PrompterDisplay";
 
 // Default Indonesian script for first-time load
-const INITIAL_SCRIPT = "Halo semuanya! [pause:1.0] Selamat datang di RhythmPrompter. Hari ini kita membongkar rahasia bicara di depan kamera secara natural. [pause:1.5] Kuncinya bukan membaca teks terus-menerus, tapi memahami irama kalimat. [pause:0.8] Coba perhatikan bagaimana tulisan ini berhenti sejenak ketika saya ingin menekankan poin penting. [pause:1.2] Dan sekarang, teleprompter ini akan menunggu saya [hold] sampai saya menekan tombol lanjut atau mengetuk layar. Keren banget kan? Cobain deh!";
+const INITIAL_SCRIPT = "";
 
 export default function App() {
   // 1. Script & Pacing States
@@ -77,6 +79,30 @@ export default function App() {
     setFocusDragOffset(0);
   };
 
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch((err) => {
+        console.error(`Error attempting to enable fullscreen: ${err.message}`);
+      });
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    }
+  };
+
   useEffect(() => {
     if (!isFocusMode) {
       setFocusDragOffset(0);
@@ -91,7 +117,8 @@ export default function App() {
     highlightColor: "#facc15", // yellow-400
     fontFamily: "sans",
     overlayOpacity: 75,
-    textPosition: "center"
+    textPosition: "center",
+    tickerType: "focus"
   });
 
   // 4. Parse script on input/config change
@@ -171,17 +198,31 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#09090b] text-neutral-100 flex flex-col font-sans" id="rhythmprompter-app-root">
-      {/* FLOATING BUTTON UNTUK BUKA KONFIGURASI DI POJOK KANAN ATAS (ONLY IN FOCUS MODE) */}
+      {/* FLOATING CONTROLS DI POJOK KANAN ATAS (ONLY IN FOCUS MODE) */}
       {isFocusMode && (
-        <button
-          id="btn-exit-focus"
-          onClick={() => setIsFocusMode(false)}
-          className="fixed top-4 right-4 z-50 flex items-center gap-1.5 px-3.5 py-2 bg-neutral-900/95 hover:bg-neutral-800 text-neutral-200 hover:text-white font-bold text-xs rounded-xl border border-neutral-700/60 shadow-2xl backdrop-blur transition active:scale-95"
-          title="Buka Konfigurasi (Keluar Focus Mode)"
-        >
-          <Settings className="w-4 h-4 text-emerald-400 animate-spin" style={{ animationDuration: "12s" }} />
-          <span>Buka Konfigurasi</span>
-        </button>
+        <div className="fixed top-4 right-4 z-50 flex items-center gap-2" id="focus-mode-floating-controls">
+          <button
+            id="btn-toggle-fullscreen"
+            onClick={toggleFullscreen}
+            className="w-10 h-10 flex items-center justify-center bg-neutral-900/95 hover:bg-neutral-800 text-neutral-200 hover:text-white rounded-xl border border-neutral-700/60 shadow-2xl backdrop-blur transition active:scale-95"
+            title={isFullscreen ? "Keluar Layar Penuh" : "Masuk Layar Penuh"}
+          >
+            {isFullscreen ? (
+              <Minimize className="w-5 h-5 text-emerald-400" />
+            ) : (
+              <Maximize className="w-5 h-5 text-emerald-400" />
+            )}
+          </button>
+
+          <button
+            id="btn-exit-focus"
+            onClick={() => setIsFocusMode(false)}
+            className="w-10 h-10 flex items-center justify-center bg-neutral-900/95 hover:bg-neutral-800 text-neutral-200 hover:text-white rounded-xl border border-neutral-700/60 shadow-2xl backdrop-blur transition active:scale-95"
+            title="Buka Konfigurasi (Keluar Focus Mode)"
+          >
+            <Settings className="w-5 h-5 text-emerald-400 animate-spin" style={{ animationDuration: "12s" }} />
+          </button>
+        </div>
       )}
 
       {/* BRAND HEADER BAR */}
@@ -405,6 +446,10 @@ export default function App() {
                 estimatedDurationMs={estimatedDurationMs}
                 pauseTagsCount={pauseTagsCount}
                 holdTagsCount={holdTagsCount}
+                tickerType={visualConfig.tickerType || "focus"}
+                onChangeTickerType={(type) =>
+                  setVisualConfig((prev) => ({ ...prev, tickerType: type }))
+                }
               />
             )}
 

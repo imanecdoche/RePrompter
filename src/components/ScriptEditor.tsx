@@ -22,6 +22,8 @@ interface ScriptEditorProps {
   estimatedDurationMs: number;
   pauseTagsCount: number;
   holdTagsCount: number;
+  tickerType?: "focus" | "flat";
+  onChangeTickerType?: (type: "focus" | "flat") => void;
 }
 
 const SCRIPT_PRESETS = [
@@ -53,7 +55,9 @@ export default function ScriptEditor({
   wordCount,
   estimatedDurationMs,
   pauseTagsCount,
-  holdTagsCount
+  holdTagsCount,
+  tickerType,
+  onChangeTickerType
 }: ScriptEditorProps) {
   const [showTagHelp, setShowTagHelp] = useState(false);
 
@@ -309,6 +313,35 @@ export default function ScriptEditor({
                   }`}
                 >
                   {count}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Ticker mode specific config */}
+        {mode === PrompterMode.TICKER && (
+          <div className="flex items-center justify-between bg-neutral-950 p-3 rounded-xl border border-neutral-800 animate-slideDown" id="ticker-mode-settings-panel">
+            <div className="flex flex-col">
+              <span className="text-xs font-semibold text-neutral-300">Gaya Ticker Teks</span>
+              <span className="text-[10px] text-neutral-500">Pilih fokus per kata terpusat atau flat teks biasa</span>
+            </div>
+            <div className="flex items-center gap-1.5 bg-neutral-900 p-0.5 rounded-lg border border-neutral-800">
+              {[
+                { type: "focus", label: "Fokus Kata" },
+                { type: "flat", label: "Flat Teks" }
+              ].map((item) => (
+                <button
+                  key={item.type}
+                  id={`ticker-type-btn-${item.type}`}
+                  onClick={() => onChangeTickerType?.(item.type as "focus" | "flat")}
+                  className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                    (tickerType || "focus") === item.type
+                      ? "bg-emerald-500 text-neutral-950"
+                      : "text-neutral-400 hover:text-neutral-200"
+                  }`}
+                >
+                  {item.label}
                 </button>
               ))}
             </div>

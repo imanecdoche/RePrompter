@@ -39,6 +39,7 @@ export interface VisualConfig {
   fontFamily: "sans" | "serif" | "mono";
   overlayOpacity: number;    // Background opacity behind text (0 to 100)
   textPosition: "top" | "center" | "bottom"; // Position of text overlay relative to camera feed
+  tickerType?: "focus" | "flat";
 }
 
 export interface PrompterState {

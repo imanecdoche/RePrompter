@@ -1,0 +1,6 @@
+{
+  "name": "RhythmPrompter",
+  "description": "Teleprompter modular dengan kontrol tempo berbasis irama bicara, serta opsi mode RSVP (Word-by-Word), Phrase, dan Horizontal Ticker.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

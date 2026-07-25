@@ -1,1 +1,25 @@
 @import "tailwindcss";
+
+@theme {
+  --font-sans: "Helvetica Neue", Helvetica, Arial, "Lucida Grande", sans-serif;
+  --font-serif: "Helvetica Neue", Helvetica, Arial, "Lucida Grande", sans-serif;
+  --font-mono: "Helvetica Neue", Helvetica, Arial, "Lucida Grande", sans-serif;
+
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
+  --radius-full: 0px;
+}
+
+html, body, #root {
+  font-family: "Helvetica Neue", Helvetica, Arial, "Lucida Grande", sans-serif !important;
+}
+
+/* Force all elements to have no rounded corners */
+* {
+  border-radius: 0px !important;
+}

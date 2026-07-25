@@ -204,7 +204,7 @@ export default function App() {
           <button
             id="btn-toggle-fullscreen"
             onClick={toggleFullscreen}
-            className="w-10 h-10 flex items-center justify-center bg-neutral-900/95 hover:bg-neutral-800 text-neutral-200 hover:text-white rounded-xl border border-neutral-700/60 shadow-2xl backdrop-blur transition active:scale-95"
+            className="w-10 h-10 flex items-center justify-center bg-neutral-900/95 hover:bg-neutral-800 text-neutral-200 hover:text-white rounded-none border border-neutral-700/60 shadow-2xl backdrop-blur transition active:scale-95"
             title={isFullscreen ? "Keluar Layar Penuh" : "Masuk Layar Penuh"}
           >
             {isFullscreen ? (
@@ -217,7 +217,7 @@ export default function App() {
           <button
             id="btn-exit-focus"
             onClick={() => setIsFocusMode(false)}
-            className="w-10 h-10 flex items-center justify-center bg-neutral-900/95 hover:bg-neutral-800 text-neutral-200 hover:text-white rounded-xl border border-neutral-700/60 shadow-2xl backdrop-blur transition active:scale-95"
+            className="w-10 h-10 flex items-center justify-center bg-neutral-900/95 hover:bg-neutral-800 text-neutral-200 hover:text-white rounded-none border border-neutral-700/60 shadow-2xl backdrop-blur transition active:scale-95"
             title="Buka Konfigurasi (Keluar Focus Mode)"
           >
             <Settings className="w-5 h-5 text-emerald-400 animate-spin" style={{ animationDuration: "12s" }} />
@@ -229,13 +229,13 @@ export default function App() {
       {!isFocusMode && (
         <header className="border-b border-neutral-800 bg-[#0c0c0e] px-4 md:px-8 py-3.5 flex items-center justify-between" id="app-main-header">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-black text-sm shadow-[0_0_15px_rgba(16,185,129,0.15)]" id="brand-logo-icon">
+            <div className="w-8 h-8 rounded-none bg-emerald-500/10 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-black text-sm shadow-[0_0_15px_rgba(16,185,129,0.15)]" id="brand-logo-icon">
               R
             </div>
             <div>
               <h1 className="text-sm font-extrabold tracking-tight text-neutral-100 flex items-center gap-1.5">
                 RhythmPrompter
-                <span className="text-[10px] bg-emerald-950 text-emerald-300 px-1.5 py-0.5 rounded-full font-bold border border-emerald-800">
+                <span className="text-[10px] bg-emerald-950 text-emerald-300 px-1.5 py-0.5 rounded-none font-bold border border-emerald-800">
                   PRO v1.2
                 </span>
               </h1>
@@ -244,7 +244,7 @@ export default function App() {
           </div>
 
           {/* Top bar quick parameters summary */}
-          <div className="hidden md:flex items-center gap-6 text-xs text-neutral-400 bg-neutral-900/40 px-4 py-1.5 rounded-xl border border-neutral-800" id="quick-top-stats">
+          <div className="hidden md:flex items-center gap-6 text-xs text-neutral-400 bg-neutral-900/40 px-4 py-1.5 rounded-none border border-neutral-800" id="quick-top-stats">
             <div className="flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5 text-neutral-500" />
               <span>Waktu Main:</span>
@@ -252,11 +252,11 @@ export default function App() {
                 {formatTime(elapsedTimeMs)} / {formatTime(estimatedDurationMs)}
               </span>
             </div>
-            <span className="w-1.5 h-1.5 rounded-full bg-neutral-800" />
+            <span className="w-1.5 h-1.5 rounded-none bg-neutral-800" />
             <div>
               <span>Tempo:</span> <strong className="text-emerald-400 font-bold">{wpm} WPM</strong>
             </div>
-            <span className="w-1.5 h-1.5 rounded-full bg-neutral-800" />
+            <span className="w-1.5 h-1.5 rounded-none bg-neutral-800" />
             <div>
               <span>Mode:</span> <strong className="text-neutral-200 uppercase">{mode}</strong>
             </div>
@@ -280,14 +280,14 @@ export default function App() {
           {!isFocusMode && (
             <div className="flex items-center justify-between px-1" id="prompter-section-header">
               <h2 className="text-xs font-bold uppercase tracking-widest text-neutral-500 flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="w-1.5 h-1.5 rounded-none bg-emerald-500 animate-pulse" />
                 Prompter Live Canvas
               </h2>
               <div className="flex items-center gap-2">
                 <button
                   id="btn-trigger-focus"
                   onClick={() => setIsFocusMode(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-900 hover:bg-neutral-800 text-emerald-400 hover:text-emerald-300 font-bold text-xs rounded-xl border border-neutral-800 transition active:scale-95 shadow-sm"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-900 hover:bg-neutral-800 text-emerald-400 hover:text-emerald-300 font-bold text-xs rounded-none border border-neutral-800 transition active:scale-95 shadow-sm"
                   title="Masuk Mode Fokus (Sembunyikan Konfigurasi)"
                 >
                   <Eye className="w-3.5 h-3.5" />
@@ -325,7 +325,7 @@ export default function App() {
           <div 
             className={isFocusMode
               ? "flex items-center justify-center p-2 mt-4"
-              : "bg-neutral-900 border border-neutral-800 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg shadow-black/40"
+              : "bg-neutral-900 border border-neutral-800 p-4 rounded-none flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg shadow-black/40"
             } 
             id="prompter-control-hub"
           >
@@ -335,7 +335,7 @@ export default function App() {
                 id="btn-nav-prev"
                 onClick={skipPrev}
                 disabled={currentIndex === 0}
-                className="w-12 h-12 flex items-center justify-center bg-neutral-950 border border-neutral-800/80 text-neutral-400 hover:text-white disabled:opacity-30 disabled:hover:text-neutral-400 rounded-xl transition active:scale-95 shadow-md"
+                className="w-12 h-12 flex items-center justify-center bg-neutral-950 border border-neutral-800/80 text-neutral-400 hover:text-white disabled:opacity-30 disabled:hover:text-neutral-400 rounded-none transition active:scale-95 shadow-md"
                 title="Sebelumnya"
               >
                 <ChevronLeft className="w-6 h-6" />
@@ -344,7 +344,7 @@ export default function App() {
               <button
                 id="btn-nav-play-toggle"
                 onClick={togglePlay}
-                className={`px-8 py-2.5 h-12 font-bold text-xs rounded-xl transition active:scale-95 flex items-center gap-2.5 shadow-xl uppercase tracking-wider ${
+                className={`px-8 py-2.5 h-12 font-bold text-xs rounded-none transition active:scale-95 flex items-center gap-2.5 shadow-xl uppercase tracking-wider ${
                   isPlaying
                     ? "bg-amber-600 text-white hover:bg-amber-500 shadow-amber-950/25 border border-amber-500"
                     : "bg-emerald-500 text-neutral-950 hover:bg-emerald-400 shadow-emerald-950/25 border border-emerald-400"
@@ -367,7 +367,7 @@ export default function App() {
                 id="btn-nav-next"
                 onClick={skipNext}
                 disabled={words.length === 0}
-                className="w-12 h-12 flex items-center justify-center bg-neutral-950 border border-neutral-800/80 text-neutral-400 hover:text-white disabled:opacity-30 disabled:hover:text-neutral-400 rounded-xl transition active:scale-95 shadow-md"
+                className="w-12 h-12 flex items-center justify-center bg-neutral-950 border border-neutral-800/80 text-neutral-400 hover:text-white disabled:opacity-30 disabled:hover:text-neutral-400 rounded-none transition active:scale-95 shadow-md"
                 title={isHolding ? "Lompati Hold" : "Selanjutnya"}
               >
                 <ChevronRight className="w-6 h-6" />
@@ -376,7 +376,7 @@ export default function App() {
               <button
                 id="btn-nav-reset"
                 onClick={reset}
-                className="w-12 h-12 flex items-center justify-center bg-neutral-950 border border-neutral-800/80 text-neutral-400 hover:text-red-400 rounded-xl transition hover:border-red-900/30 active:scale-95 shadow-md"
+                className="w-12 h-12 flex items-center justify-center bg-neutral-950 border border-neutral-800/80 text-neutral-400 hover:text-red-400 rounded-none transition hover:border-red-900/30 active:scale-95 shadow-md"
                 title="Reset dari awal"
               >
                 <RotateCcw className="w-5 h-5" />
@@ -385,7 +385,7 @@ export default function App() {
 
             {/* Time counters display */}
             {!isFocusMode && (
-              <div className="flex items-center gap-3 bg-neutral-950 px-4 py-2.5 rounded-xl border border-neutral-800 w-full sm:w-auto justify-center" id="playtime-stats-overlay">
+              <div className="flex items-center gap-3 bg-neutral-950 px-4 py-2.5 rounded-none border border-neutral-800 w-full sm:w-auto justify-center" id="playtime-stats-overlay">
                 <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Durasi</span>
                 <span className="font-mono font-bold text-sm text-neutral-200">
                   {formatTime(elapsedTimeMs)}
@@ -403,7 +403,7 @@ export default function App() {
         {!isFocusMode && (
           <section className="lg:col-span-5 flex flex-col gap-4" id="right-config-column">
           {/* Header Tab System */}
-          <div className="flex border-b border-neutral-800 bg-[#0c0c0e] p-1 rounded-xl" id="config-tabs-navigation">
+          <div className="flex border-b border-neutral-800 bg-[#0c0c0e] p-1 rounded-none" id="config-tabs-navigation">
             {[
               { id: "editor", label: "Teks Naskah", icon: Sliders },
               { id: "styling", label: "Gaya Tampilan", icon: Type },
@@ -415,7 +415,7 @@ export default function App() {
                   key={tab.id}
                   id={`tab-btn-${tab.id}`}
                   onClick={() => setActiveTab(tab.id as any)}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-lg transition-all ${
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-none transition-all ${
                     activeTab === tab.id
                       ? "bg-neutral-900 text-emerald-400 shadow-sm"
                       : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900/40"
@@ -429,7 +429,7 @@ export default function App() {
           </div>
 
           {/* TAB CONTENTS (No nesting of cards - directly flat panel content) */}
-          <div className="flex-1 bg-neutral-950/40 border border-neutral-800/60 p-5 rounded-2xl flex flex-col gap-4" id="config-panel-content">
+          <div className="flex-1 bg-neutral-950/40 border border-neutral-800/60 p-5 rounded-none flex flex-col gap-4" id="config-panel-content">
             {activeTab === "editor" && (
               <ScriptEditor
                 text={scriptText}
@@ -520,7 +520,7 @@ export default function App() {
                         onClick={() =>
                           setVisualConfig((prev) => ({ ...prev, highlightColor: color.hex }))
                         }
-                        className={`w-8 h-8 rounded-full transition relative ${
+                        className={`w-8 h-8 rounded-none transition relative ${
                           visualConfig.highlightColor === color.hex
                             ? "ring-2 ring-emerald-400 ring-offset-2 ring-offset-neutral-950"
                             : ""
@@ -547,7 +547,7 @@ export default function App() {
                         onClick={() =>
                           setVisualConfig((prev) => ({ ...prev, textPosition: item.pos as any }))
                         }
-                        className={`py-1.5 rounded-lg text-xs font-semibold border transition ${
+                        className={`py-1.5 rounded-none text-xs font-semibold border transition ${
                           visualConfig.textPosition === item.pos
                             ? "bg-neutral-900 border-emerald-500 text-emerald-300"
                             : "bg-neutral-950 border-neutral-800 text-neutral-400 hover:border-neutral-700"
@@ -577,7 +577,7 @@ export default function App() {
                         onClick={() =>
                           setVisualConfig((prev) => ({ ...prev, fontFamily: item.family as any }))
                         }
-                        className={`py-1.5 rounded-lg text-xs font-semibold border transition ${
+                        className={`py-1.5 rounded-none text-xs font-semibold border transition ${
                           visualConfig.fontFamily === item.family
                             ? "bg-neutral-900 border-emerald-500 text-emerald-300"
                             : "bg-neutral-950 border-neutral-800 text-neutral-400 hover:border-neutral-700"
@@ -605,7 +605,7 @@ export default function App() {
                         onClick={() =>
                           setVisualConfig((prev) => ({ ...prev, theme: theme.id as any }))
                         }
-                        className={`py-2 px-3 rounded-lg text-xs font-semibold border text-left transition ${
+                        className={`py-2 px-3 rounded-none text-xs font-semibold border text-left transition ${
                           visualConfig.theme === theme.id
                             ? "bg-neutral-900 border-emerald-500 text-emerald-300"
                             : "bg-neutral-950 border-neutral-800 text-neutral-400 hover:border-neutral-700"
@@ -643,18 +643,18 @@ export default function App() {
                   ].map((shortcut, index) => (
                     <div
                       key={index}
-                      className="flex justify-between items-center bg-neutral-950 p-2.5 rounded-xl border border-neutral-800"
+                      className="flex justify-between items-center bg-neutral-950 p-2.5 rounded-none border border-neutral-800"
                       id={`shortcut-item-${index}`}
                     >
                       <span className="text-[11px] font-bold text-neutral-300">{shortcut.desc}</span>
-                      <kbd className="px-2 py-0.5 bg-neutral-900 text-emerald-400 border border-neutral-800 rounded font-mono text-[10px] whitespace-nowrap shadow">
+                      <kbd className="px-2 py-0.5 bg-neutral-900 text-emerald-400 border border-neutral-800 rounded-none font-mono text-[10px] whitespace-nowrap shadow">
                         {shortcut.key}
                       </kbd>
                     </div>
                   ))}
                 </div>
 
-                <div className="p-3 bg-neutral-900/60 border border-neutral-800 rounded-xl flex items-start gap-2.5 mt-2" id="hotkey-tip-banner">
+                <div className="p-3 bg-neutral-900/60 border border-neutral-800 rounded-none flex items-start gap-2.5 mt-2" id="hotkey-tip-banner">
                   <Info className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                   <p className="text-[10px] text-neutral-400 leading-normal">
                     *Catatan: Tombol shortcut dinonaktifkan secara otomatis ketika kursor Anda aktif mengetik di dalam kolom input/textarea editor naskah.

@@ -67,7 +67,7 @@ export default function PrompterDisplay({
 
   if (words.length === 0) {
     return (
-      <div className="w-full h-48 flex items-center justify-center border-2 border-dashed border-neutral-800 rounded-xl px-4 text-center text-neutral-500 text-sm" id="prompter-no-words-placeholder">
+      <div className="w-full h-48 flex items-center justify-center border-2 border-dashed border-neutral-800 rounded-none px-4 text-center text-neutral-500 text-sm" id="prompter-no-words-placeholder">
         Naskah kosong atau tidak terdeteksi. Silakan ketik atau pilih template naskah di bawah untuk memulai teleprompter.
       </div>
     );
@@ -127,7 +127,7 @@ export default function PrompterDisplay({
         highlightStyle = `underline decoration-4 underline-offset-8`;
         break;
       case "background":
-        highlightStyle = `bg-emerald-500/20 px-2 py-0.5 rounded-md border border-emerald-500/30`;
+        highlightStyle = `bg-emerald-500/20 px-2 py-0.5 rounded-none border border-emerald-500/30`;
         break;
       case "text-color":
       default:
@@ -160,7 +160,7 @@ export default function PrompterDisplay({
       {/* 1. Visual Presentation Area (Press & Hold and clicks interact here) */}
       <div
         id="prompter-gesture-canvas"
-        className={`w-full aspect-video md:aspect-[16/9] flex flex-col items-center rounded-2xl p-6 md:p-12 transition-all cursor-pointer relative overflow-hidden shadow-2xl ${textPositionClasses} ${getThemeClasses()} ${getFontFamilyClass()} ${
+        className={`w-full aspect-video md:aspect-[16/9] flex flex-col items-center rounded-none p-6 md:p-12 transition-all cursor-pointer relative overflow-hidden shadow-2xl ${textPositionClasses} ${getThemeClasses()} ${getFontFamilyClass()} ${
           isFocusMode ? "cursor-grab active:cursor-grabbing" : ""
         }`}
         onMouseDown={(e) => {
@@ -223,7 +223,7 @@ export default function PrompterDisplay({
 
         {/* Play/Pause state background indicator */}
         {!isFocusMode && isHolding && (
-          <div className="absolute top-3 left-3 z-20 bg-red-950/80 border border-red-500/30 px-2 py-1 rounded-md text-[10px] font-bold text-red-300 uppercase tracking-widest flex items-center gap-1.5 animate-pulse" id="hold-active-indicator">
+          <div className="absolute top-3 left-3 z-20 bg-red-950/80 border border-red-500/30 px-2 py-1 rounded-none text-[10px] font-bold text-red-300 uppercase tracking-widest flex items-center gap-1.5 animate-pulse" id="hold-active-indicator">
             <Hand className="w-3 h-3 text-red-400" />
             <span>HOLD TAG ACTIVE - PRESS NEXT TO RESUME</span>
           </div>
@@ -346,7 +346,7 @@ export default function PrompterDisplay({
             <button
               id="btn-prompter-prev"
               onClick={onTriggerPrev}
-              className="p-1.5 hover:text-emerald-400 bg-neutral-900 border border-neutral-800 rounded-lg transition active:scale-95"
+              className="p-1.5 hover:text-emerald-400 bg-neutral-900 border border-neutral-800 rounded-none transition active:scale-95"
               title="Suku kata sebelumnya"
             >
               <ChevronLeft className="w-5 h-5" />
@@ -354,7 +354,7 @@ export default function PrompterDisplay({
             <button
               id="btn-prompter-next"
               onClick={onTriggerNext}
-              className="p-1.5 hover:text-emerald-400 bg-neutral-900 border border-neutral-800 rounded-lg transition active:scale-95 flex items-center gap-1 text-xs"
+              className="p-1.5 hover:text-emerald-400 bg-neutral-900 border border-neutral-800 rounded-none transition active:scale-95 flex items-center gap-1 text-xs"
               title="Lanjut atau Lewati"
             >
               <span className="hidden sm:inline font-semibold">Lewati/Hold</span>
@@ -363,7 +363,7 @@ export default function PrompterDisplay({
           </div>
 
           {/* Mini progress stats tracker */}
-          <div className="text-xs font-semibold text-neutral-400 flex items-center gap-3 bg-neutral-900 px-3 py-1.5 border border-neutral-800 rounded-lg" id="prompter-progress-bubble">
+          <div className="text-xs font-semibold text-neutral-400 flex items-center gap-3 bg-neutral-900 px-3 py-1.5 border border-neutral-800 rounded-none" id="prompter-progress-bubble">
             <span>Kata:</span>
             <span className="text-emerald-400">{currentIndex + 1} / {words.length}</span>
             <span className="text-neutral-700">|</span>
@@ -377,7 +377,7 @@ export default function PrompterDisplay({
           <button
             id="btn-prompter-play-toggle"
             onClick={onTogglePlay}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition active:scale-95 ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-none transition active:scale-95 ${
               isPlaying
                 ? "bg-amber-600/20 border border-amber-500/30 text-amber-300"
                 : "bg-emerald-600 text-neutral-950 hover:bg-emerald-500"

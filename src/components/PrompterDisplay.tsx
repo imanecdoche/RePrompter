@@ -80,7 +80,14 @@ export default function PrompterDisplay({
   const activePhraseIndex = phrases.findIndex((phrase) =>
     phrase.words.some((w) => w.index === currentIndex)
   );
-  const activePhrase = phrases[activePhraseIndex] || phrases[0] || { text: "", words: [] };
+  const activePhrase: PrompterPhrase = phrases[activePhraseIndex] || phrases[0] || {
+    id: "fallback",
+    words: [],
+    text: "",
+    durationMs: 0,
+    startTimeMs: 0,
+    isHold: false
+  };
 
   const getWordTooltip = (w: PrompterWord) => {
     const parts: string[] = [];
@@ -255,30 +262,43 @@ export default function PrompterDisplay({
 
           {/* MODE A: WORD-BY-WORD (RSVP) */}
           {mode === PrompterMode.WORD && (
-            <div className="text-center font-bold tracking-wide transition-all" style={textStyle} id="word-rsvp-box">
-              <span
-                id={`word-token-${activeWord.index}`}
-                style={{
-                  color: activeWord.isHold && isHolding ? "#f87171" : visualConfig.highlightColor
-                }}
-                className={`${getFocalHighlightClasses(true)} inline-flex items-center gap-1.5`}
-                title={getWordTooltip(activeWord)}
-              >
-                <span>{activeWord.text}</span>
-                {activeWord.customPauseMs > 0 && (
-                  <span className="text-sm text-yellow-400 font-normal opacity-90 select-none cursor-help" title={`Jeda Tag: ${(activeWord.customPauseMs / 1000).toFixed(1)} detik`}>
-                    ⏱️
-                  </span>
-                )}
-                {activeWord.isHold && (
-                  <span className="text-sm text-red-400 font-normal opacity-90 select-none cursor-help" title="Tag Tahan (Hold) Aktif">
-                    🛑
-                  </span>
-                )}
-              </span>
+            <div className="flex flex-col items-center gap-4 w-full" id="word-mode-container">
+              <div className="text-center font-bold tracking-wide transition-all" style={textStyle} id="word-rsvp-box">
+                <span
+                  id={`word-token-${activeWord.index}`}
+                  style={{
+                    color: activeWord.isHold && isHolding ? "#f87171" : visualConfig.highlightColor
+                  }}
+                  className={`${getFocalHighlightClasses(true)} inline-flex items-center gap-1.5`}
+                  title={getWordTooltip(activeWord)}
+                >
+                  <span>{activeWord.text}</span>
+                  {activeWord.customPauseMs > 0 && (
+                    <span className="text-sm text-yellow-400 font-normal opacity-90 select-none cursor-help" title={`Jeda Tag: ${(activeWord.customPauseMs / 1000).toFixed(1)} detik`}>
+                      ⏱️
+                    </span>
+                  )}
+                  {activeWord.isHold && (
+                    <span className="text-sm text-red-400 font-normal opacity-90 select-none cursor-help" title="Tag Tahan (Hold) Aktif">
+                      🛑
+                    </span>
+                  )}
+                </span>
+              </div>
 
-              {/* Subdued surrounding hint (next word context) to reduce cognitive load */}
-              {!isFocusMode && currentIndex < words.length - 1 && (
+              {/* Tampilkan Kata Selanjutnya di bawahnya dg opacity 50% & ukuran yg sama jika aktif */}
+              {visualConfig.showNextPreview && currentIndex < words.length - 1 && (
+                <div 
+                  style={{ fontSize: `${visualConfig.fontSize}px` }} 
+                  className="text-center text-neutral-400/50 font-bold tracking-wide transition-all duration-200 select-none"
+                  id="word-next-preview"
+                >
+                  {words[currentIndex + 1].text}
+                </div>
+              )}
+
+              {/* Subdued surrounding hint (next word context) to reduce cognitive load - only show if showNextPreview is false */}
+              {!visualConfig.showNextPreview && !isFocusMode && currentIndex < words.length - 1 && (
                 <div className="text-xs text-neutral-500 mt-4 opacity-60 font-normal tracking-normal flex items-center justify-center gap-1">
                   <span>Selanjutnya:</span>
                   <span className="font-semibold">{words[currentIndex + 1].text}</span>
@@ -289,42 +309,69 @@ export default function PrompterDisplay({
 
           {/* MODE B: PHRASE-BY-PHRASE */}
           {mode === PrompterMode.PHRASE && (
-            <div className="text-center flex flex-wrap justify-center gap-x-4 gap-y-2 max-w-2xl leading-relaxed" id="phrase-box">
-              {activePhrase.words && activePhrase.words.map((w: PrompterWord) => {
-                const isWordActive = w.index === currentIndex;
-                const hasPause = w.customPauseMs > 0;
-                const hasHold = w.isHold;
-                return (
+            <div className="flex flex-col items-center gap-6 w-full" id="phrase-mode-container">
+              <div className="text-center flex flex-wrap justify-center gap-x-4 gap-y-2 max-w-2xl leading-relaxed" id="phrase-box">
+                {visualConfig.phraseHighlightType === "phrase" ? (
+                  // Mode 2: Satu frasa utuh, tidak di-highlight per kata
                   <span
-                    key={w.id}
-                    id={`phrase-word-token-${w.index}`}
-                    style={
-                      isWordActive
-                        ? {
-                            fontSize: `${visualConfig.fontSize}px`,
-                            color: w.isHold && isHolding ? "#f87171" : visualConfig.highlightColor
-                          }
-                        : {
-                            fontSize: `${visualConfig.fontSize * 0.9}px`
-                          }
-                    }
-                    className={`${getFocalHighlightClasses(isWordActive)} inline-flex items-center gap-1 transition-all cursor-help`}
-                    title={getWordTooltip(w)}
+                    style={{
+                      fontSize: `${visualConfig.fontSize}px`,
+                      color: activePhrase.isHold && isHolding ? "#f87171" : (visualConfig.focalHighlight === "none" ? undefined : visualConfig.highlightColor)
+                    }}
+                    className={`font-bold transition-all duration-200 text-center select-none`}
                   >
-                    <span>{w.text}</span>
-                    {hasPause && (
-                      <span className="text-xs text-yellow-400 font-normal opacity-85 select-none" title={`Jeda Tag: ${(w.customPauseMs / 1000).toFixed(1)} detik`}>
-                        ⏱️
-                      </span>
-                    )}
-                    {hasHold && (
-                      <span className="text-xs text-red-400 font-normal opacity-85 select-none" title="Tag Tahan (Hold) Aktif">
-                        🛑
-                      </span>
-                    )}
+                    {activePhrase.text}
                   </span>
-                );
-              })}
+                ) : (
+                  // Mode 1: Highlight per kata (bawaan)
+                  activePhrase.words && activePhrase.words.map((w: PrompterWord) => {
+                    const isWordActive = w.index === currentIndex;
+                    const hasPause = w.customPauseMs > 0;
+                    const hasHold = w.isHold;
+                    return (
+                      <span
+                        key={w.id}
+                        id={`phrase-word-token-${w.index}`}
+                        style={
+                          isWordActive
+                            ? {
+                                fontSize: `${visualConfig.fontSize}px`,
+                                color: w.isHold && isHolding ? "#f87171" : visualConfig.highlightColor
+                              }
+                            : {
+                                fontSize: `${visualConfig.fontSize * 0.9}px`
+                              }
+                        }
+                        className={`${getFocalHighlightClasses(isWordActive)} inline-flex items-center gap-1 transition-all cursor-help`}
+                        title={getWordTooltip(w)}
+                      >
+                        <span>{w.text}</span>
+                        {hasPause && (
+                          <span className="text-xs text-yellow-400 font-normal opacity-85 select-none" title={`Jeda Tag: ${(w.customPauseMs / 1000).toFixed(1)} detik`}>
+                            ⏱️
+                          </span>
+                        )}
+                        {hasHold && (
+                          <span className="text-xs text-red-400 font-normal opacity-85 select-none" title="Tag Tahan (Hold) Aktif">
+                            🛑
+                          </span>
+                        )}
+                      </span>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Tampilkan Frasa Selanjutnya di bawahnya dg opacity 50% & ukuran yg sama jika aktif */}
+              {visualConfig.showNextPreview && activePhraseIndex < phrases.length - 1 && (
+                <div 
+                  style={{ fontSize: `${visualConfig.fontSize}px` }} 
+                  className="text-center text-neutral-400/50 max-w-2xl font-bold leading-relaxed transition-all duration-200 select-none" 
+                  id="phrase-next-preview"
+                >
+                  {phrases[activePhraseIndex + 1].text}
+                </div>
+              )}
             </div>
           )}
 
@@ -347,6 +394,8 @@ export default function PrompterDisplay({
                   const hasPause = w.customPauseMs > 0;
                   const hasHold = w.isHold;
 
+                  const visuallyActive = isWordActive && !visualConfig.disableWordHighlight;
+
                   return (
                     <span
                       key={w.id}
@@ -356,11 +405,11 @@ export default function PrompterDisplay({
                         visualConfig.tickerType === "flat"
                           ? {
                               fontSize: `${visualConfig.fontSize}px`,
-                              color: isWordActive
+                              color: visuallyActive
                                 ? (w.isHold && isHolding ? "#f87171" : visualConfig.highlightColor)
                                 : undefined
                             }
-                          : (isWordActive
+                          : (visuallyActive
                               ? {
                                   fontSize: `${visualConfig.fontSize}px`,
                                   color: w.isHold && isHolding ? "#f87171" : visualConfig.highlightColor
@@ -370,7 +419,7 @@ export default function PrompterDisplay({
                                 }
                             )
                       }
-                      className={`${getFocalHighlightClasses(isWordActive)} inline-flex items-center gap-1 transition-all cursor-help`}
+                      className={`${getFocalHighlightClasses(visuallyActive)} inline-flex items-center gap-1 transition-all cursor-help`}
                       title={getWordTooltip(w)}
                     >
                       <span>{w.text}</span>

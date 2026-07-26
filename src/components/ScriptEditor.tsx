@@ -26,6 +26,10 @@ interface ScriptEditorProps {
   holdTagsCount: number;
   tickerType?: "focus" | "flat";
   onChangeTickerType?: (type: "focus" | "flat") => void;
+  phraseHighlightType?: "word" | "phrase";
+  onChangePhraseHighlightType?: (type: "word" | "phrase") => void;
+  disableWordHighlight?: boolean;
+  onChangeDisableWordHighlight?: (disable: boolean) => void;
 }
 
 const SCRIPT_PRESETS = [
@@ -61,7 +65,11 @@ export default function ScriptEditor({
   pauseTagsCount,
   holdTagsCount,
   tickerType,
-  onChangeTickerType
+  onChangeTickerType,
+  phraseHighlightType,
+  onChangePhraseHighlightType,
+  disableWordHighlight,
+  onChangeDisableWordHighlight
 }: ScriptEditorProps) {
   const [showTagHelp, setShowTagHelp] = useState(false);
 
@@ -396,55 +404,111 @@ export default function ScriptEditor({
 
         {/* Phrase mode specific count config */}
         {mode === PrompterMode.PHRASE && (
-          <div className="flex items-center justify-between bg-neutral-950 p-3 rounded-none border border-neutral-800 animate-slideDown" id="phrase-mode-settings-panel">
-            <div className="flex flex-col">
-              <span className="text-xs font-semibold text-neutral-300">Maksimal Kata per Frasa</span>
-              <span className="text-[10px] text-neutral-500">Jumlah kata sebelum otomatis dipotong ke kloter berikutnya</span>
+          <div className="flex flex-col gap-3 bg-neutral-950 p-3 rounded-none border border-neutral-800 animate-slideDown" id="phrase-mode-settings-panel">
+            <div className="flex items-center justify-between">
+              <div className="flex flex-col">
+                <span className="text-xs font-semibold text-neutral-300">Maksimal Kata per Frasa</span>
+                <span className="text-[10px] text-neutral-500">Jumlah kata sebelum otomatis dipotong ke kloter berikutnya</span>
+              </div>
+              <div className="flex items-center gap-1">
+                {[2, 3, 4, 5].map((count) => (
+                  <button
+                    key={count}
+                    id={`phrase-word-count-btn-${count}`}
+                    onClick={() => onChangeMaxWordsPerPhrase(count)}
+                    className={`w-8 h-8 rounded-none text-xs font-bold border transition ${
+                      maxWordsPerPhrase === count
+                        ? "bg-emerald-500 text-neutral-950 border-emerald-500"
+                        : "bg-neutral-900 text-neutral-400 border-neutral-800 hover:border-neutral-700"
+                    }`}
+                  >
+                    {count}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="flex items-center gap-1">
-              {[2, 3, 4, 5].map((count) => (
-                <button
-                  key={count}
-                  id={`phrase-word-count-btn-${count}`}
-                  onClick={() => onChangeMaxWordsPerPhrase(count)}
-                  className={`w-8 h-8 rounded-none text-xs font-bold border transition ${
-                    maxWordsPerPhrase === count
-                      ? "bg-emerald-500 text-neutral-950 border-emerald-500"
-                      : "bg-neutral-900 text-neutral-400 border-neutral-800 hover:border-neutral-700"
-                  }`}
-                >
-                  {count}
-                </button>
-              ))}
+
+            <div className="pt-2 border-t border-neutral-900 flex items-center justify-between">
+              <div className="flex flex-col">
+                <span className="text-xs font-semibold text-neutral-300">Gaya Sorotan Frasa</span>
+                <span className="text-[10px] text-neutral-500">Sorotan per kata atau langsung satu frasa utuh</span>
+              </div>
+              <div className="flex items-center gap-1 bg-neutral-900 p-0.5 rounded-none border border-neutral-800">
+                {[
+                  { type: "word", label: "Highlight Per Kata" },
+                  { type: "phrase", label: "Satu Frasa Utuh" }
+                ].map((item) => (
+                  <button
+                    key={item.type}
+                    id={`phrase-highlight-btn-${item.type}`}
+                    onClick={() => onChangePhraseHighlightType?.(item.type as "word" | "phrase")}
+                    className={`px-3 py-1.5 rounded-none text-xs font-bold transition-all ${
+                      (phraseHighlightType || "word") === item.type
+                        ? "bg-emerald-500 text-neutral-950"
+                        : "text-neutral-400 hover:text-neutral-200"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         )}
 
         {/* Ticker mode specific config */}
         {mode === PrompterMode.TICKER && (
-          <div className="flex items-center justify-between bg-neutral-950 p-3 rounded-none border border-neutral-800 animate-slideDown" id="ticker-mode-settings-panel">
-            <div className="flex flex-col">
-              <span className="text-xs font-semibold text-neutral-300">Gaya Ticker Teks</span>
-              <span className="text-[10px] text-neutral-500">Pilih fokus per kata terpusat atau flat teks biasa</span>
+          <div className="flex flex-col gap-3 bg-neutral-950 p-3 rounded-none border border-neutral-800 animate-slideDown" id="ticker-mode-settings-panel">
+            <div className="flex items-center justify-between">
+              <div className="flex flex-col">
+                <span className="text-xs font-semibold text-neutral-300">Gaya Ticker Teks</span>
+                <span className="text-[10px] text-neutral-500">Pilih fokus per kata terpusat atau flat teks biasa</span>
+              </div>
+              <div className="flex items-center gap-1.5 bg-neutral-900 p-0.5 rounded-none border border-neutral-800">
+                {[
+                  { type: "focus", label: "Fokus Kata" },
+                  { type: "flat", label: "Flat Teks" }
+                ].map((item) => (
+                  <button
+                    key={item.type}
+                    id={`ticker-type-btn-${item.type}`}
+                    onClick={() => onChangeTickerType?.(item.type as "focus" | "flat")}
+                    className={`px-3 py-1.5 rounded-none text-xs font-bold transition-all ${
+                      (tickerType || "focus") === item.type
+                        ? "bg-emerald-500 text-neutral-950"
+                        : "text-neutral-400 hover:text-neutral-200"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="flex items-center gap-1.5 bg-neutral-900 p-0.5 rounded-none border border-neutral-800">
-              {[
-                { type: "focus", label: "Fokus Kata" },
-                { type: "flat", label: "Flat Teks" }
-              ].map((item) => (
-                <button
-                  key={item.type}
-                  id={`ticker-type-btn-${item.type}`}
-                  onClick={() => onChangeTickerType?.(item.type as "focus" | "flat")}
-                  className={`px-3 py-1.5 rounded-none text-xs font-bold transition-all ${
-                    (tickerType || "focus") === item.type
-                      ? "bg-emerald-500 text-neutral-950"
-                      : "text-neutral-400 hover:text-neutral-200"
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
+
+            <div className="pt-2 border-t border-neutral-900 flex items-center justify-between">
+              <div className="flex flex-col">
+                <span className="text-xs font-semibold text-neutral-300">Sorotan Kata Aktif</span>
+                <span className="text-[10px] text-neutral-500">Nyalakan sorotan kata atau running text polos biasa</span>
+              </div>
+              <div className="flex items-center gap-1 bg-neutral-900 p-0.5 rounded-none border border-neutral-800">
+                {[
+                  { disabled: false, label: "Sorotan Aktif" },
+                  { disabled: true, label: "Tanpa Highlight" }
+                ].map((item) => (
+                  <button
+                    key={item.disabled ? "disabled" : "enabled"}
+                    id={`ticker-highlight-btn-${item.disabled ? "disabled" : "enabled"}`}
+                    onClick={() => onChangeDisableWordHighlight?.(item.disabled)}
+                    className={`px-3 py-1.5 rounded-none text-xs font-bold transition-all ${
+                      !!disableWordHighlight === item.disabled
+                        ? "bg-emerald-500 text-neutral-950"
+                        : "text-neutral-400 hover:text-neutral-200"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         )}

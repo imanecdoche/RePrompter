@@ -148,7 +148,10 @@ export default function App() {
     fontFamily: "sans",
     overlayOpacity: 75,
     textPosition: "center",
-    tickerType: "focus"
+    tickerType: "focus",
+    phraseHighlightType: "word",
+    disableWordHighlight: false,
+    showNextPreview: false
   });
 
   const [showSaveSuccess, setShowSaveSuccess] = useState<boolean>(false);
@@ -509,6 +512,14 @@ export default function App() {
                 onChangeTickerType={(type) =>
                   setVisualConfig((prev) => ({ ...prev, tickerType: type }))
                 }
+                phraseHighlightType={visualConfig.phraseHighlightType || "word"}
+                onChangePhraseHighlightType={(type) =>
+                  setVisualConfig((prev) => ({ ...prev, phraseHighlightType: type }))
+                }
+                disableWordHighlight={!!visualConfig.disableWordHighlight}
+                onChangeDisableWordHighlight={(disable) =>
+                  setVisualConfig((prev) => ({ ...prev, disableWordHighlight: disable }))
+                }
               />
             )}
 
@@ -673,6 +684,28 @@ export default function App() {
                         {theme.label}
                       </button>
                     ))}
+                  </div>
+                </div>
+
+                {/* Fitur Pratinjau Teks Selanjutnya */}
+                <div className="flex flex-col gap-3 bg-neutral-950 p-3 rounded-none border border-neutral-800" id="show-next-preview-toggle-container">
+                  <div className="flex items-center justify-between">
+                    <div className="flex flex-col">
+                      <span className="text-xs font-semibold text-neutral-300">Tampilkan Frasa/Kata Selanjutnya</span>
+                      <span className="text-[10px] text-neutral-500 leading-tight">Menampilkan teks berikutnya di bawah kata/frasa utama (opacity 50%)</span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        id="show-next-preview-checkbox"
+                        type="checkbox"
+                        checked={!!visualConfig.showNextPreview}
+                        onChange={(e) =>
+                          setVisualConfig((prev) => ({ ...prev, showNextPreview: e.target.checked }))
+                        }
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-neutral-800 peer-focus:outline-none rounded-none peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-neutral-300 after:border-neutral-300 after:border after:rounded-none after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600 peer-checked:after:bg-white" />
+                    </label>
                   </div>
                 </div>
               </div>

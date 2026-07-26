@@ -48,6 +48,9 @@ export interface VisualConfig {
   overlayOpacity: number;    // Background opacity behind text (0 to 100)
   textPosition: "top" | "center" | "bottom"; // Position of text overlay relative to camera feed
   tickerType?: "focus" | "flat";
+  phraseHighlightType?: "word" | "phrase"; // "word" = highlight word, "phrase" = highlight full phrase
+  disableWordHighlight?: boolean;          // true to disable word-by-word highlights
+  showNextPreview?: boolean;               // true to show the next word/phrase below main with 50% opacity
 }
 
 export interface PrompterState {

@@ -24,8 +24,8 @@ import {
   Minimize
 } from "lucide-react";
 
-import { PrompterMode, VisualConfig } from "./types";
-import { parseScript, groupWordsIntoPhrases, formatTime } from "./lib/parser";
+import { PrompterMode, VisualConfig, PunctuationDurations } from "./types";
+import { parseScript, groupWordsIntoPhrases, formatTime, DEFAULT_PUNCTUATION_DURATIONS } from "./lib/parser";
 import { usePrompterEngine } from "./hooks/usePrompterEngine";
 import ScriptEditor from "./components/ScriptEditor";
 import PrompterDisplay from "./components/PrompterDisplay";
@@ -39,6 +39,7 @@ interface SavedConfig {
   visualConfig: VisualConfig;
   wpm: number;
   autoPacing: boolean;
+  punctuationDurations?: PunctuationDurations;
   mode: PrompterMode;
   maxWordsPerPhrase: number;
 }
@@ -62,6 +63,11 @@ export default function App() {
   const [scriptText, setScriptText] = useState<string>(INITIAL_SCRIPT);
   const [wpm, setWpm] = useState<number>(savedConfig ? savedConfig.wpm : 130);
   const [autoPacing, setAutoPacing] = useState<boolean>(savedConfig ? savedConfig.autoPacing : true);
+  const [punctuationDurations, setPunctuationDurations] = useState<PunctuationDurations>(
+    savedConfig && savedConfig.punctuationDurations
+      ? savedConfig.punctuationDurations
+      : { ...DEFAULT_PUNCTUATION_DURATIONS }
+  );
   const [mode, setMode] = useState<PrompterMode>(savedConfig ? savedConfig.mode : PrompterMode.PHRASE);
   const [maxWordsPerPhrase, setMaxWordsPerPhrase] = useState<number>(savedConfig ? savedConfig.maxWordsPerPhrase : 3);
 
@@ -152,6 +158,7 @@ export default function App() {
       visualConfig,
       wpm,
       autoPacing,
+      punctuationDurations,
       mode,
       maxWordsPerPhrase
     };
@@ -168,8 +175,8 @@ export default function App() {
 
   // 4. Parse script on input/config change
   const words = useMemo(() => {
-    return parseScript(scriptText, wpm, autoPacing);
-  }, [scriptText, wpm, autoPacing]);
+    return parseScript(scriptText, wpm, autoPacing, punctuationDurations);
+  }, [scriptText, wpm, autoPacing, punctuationDurations]);
 
   const phrases = useMemo(() => {
     return groupWordsIntoPhrases(words, maxWordsPerPhrase);
@@ -488,6 +495,8 @@ export default function App() {
                 onChangeWpm={setWpm}
                 autoPacing={autoPacing}
                 onChangeAutoPacing={setAutoPacing}
+                punctuationDurations={punctuationDurations}
+                onChangePunctuationDurations={setPunctuationDurations}
                 mode={mode}
                 onChangeMode={setMode}
                 maxWordsPerPhrase={maxWordsPerPhrase}

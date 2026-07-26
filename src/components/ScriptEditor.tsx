@@ -5,7 +5,7 @@
 
 import React, { useState } from "react";
 import { FileText, Plus, HelpCircle, Settings2, Sliders, Layers, Sparkles, Volume2 } from "lucide-react";
-import { PrompterMode } from "../types";
+import { PrompterMode, PunctuationDurations } from "../types";
 
 interface ScriptEditorProps {
   text: string;
@@ -14,6 +14,8 @@ interface ScriptEditorProps {
   onChangeWpm: (wpm: number) => void;
   autoPacing: boolean;
   onChangeAutoPacing: (pacing: boolean) => void;
+  punctuationDurations: PunctuationDurations;
+  onChangePunctuationDurations: (durations: PunctuationDurations) => void;
   mode: PrompterMode;
   onChangeMode: (mode: PrompterMode) => void;
   maxWordsPerPhrase: number;
@@ -48,6 +50,8 @@ export default function ScriptEditor({
   onChangeWpm,
   autoPacing,
   onChangeAutoPacing,
+  punctuationDurations,
+  onChangePunctuationDurations,
   mode,
   onChangeMode,
   maxWordsPerPhrase,
@@ -157,6 +161,7 @@ export default function ScriptEditor({
             id="btn-inject-pause-0-5"
             onClick={() => injectTag("[pause:0.5]")}
             className="px-2.5 py-1 bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-300 text-xs rounded-none font-medium transition flex items-center gap-1"
+            title="Sisipkan tag jeda selama 0.5 detik [pause:0.5] di naskah untuk menghentikan gulir sejenak"
           >
             <Plus className="w-3 h-3 text-emerald-400" />
             Jeda 0.5s
@@ -165,6 +170,7 @@ export default function ScriptEditor({
             id="btn-inject-pause-1-5"
             onClick={() => injectTag("[pause:1.5]")}
             className="px-2.5 py-1 bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-300 text-xs rounded-none font-medium transition flex items-center gap-1"
+            title="Sisipkan tag jeda selama 1.5 detik [pause:1.5] di naskah untuk jeda nafas atau intonasi alami"
           >
             <Plus className="w-3 h-3 text-emerald-400" />
             Jeda 1.5s
@@ -173,6 +179,7 @@ export default function ScriptEditor({
             id="btn-inject-hold"
             onClick={() => injectTag("[hold]")}
             className="px-2.5 py-1 bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-300 text-xs rounded-none font-medium transition flex items-center gap-1"
+            title="Sisipkan tag penahan [hold] untuk menghentikan gulir otomatis sepenuhnya sampai Anda mengklik layar atau tombol Selanjutnya"
           >
             <Plus className="w-3 h-3 text-emerald-400" />
             Tahan (Hold)
@@ -273,11 +280,11 @@ export default function ScriptEditor({
           </div>
 
           {/* Autopacing trigger */}
-          <div className="flex flex-col justify-center gap-1.5 bg-neutral-950 p-3 rounded-none border border-neutral-800">
+          <div className="flex flex-col gap-3 bg-neutral-950 p-3 rounded-none border border-neutral-800">
             <div className="flex items-center justify-between">
               <div className="flex flex-col">
                 <span className="text-xs font-semibold text-neutral-300">Pacing Tanda Baca Otomatis</span>
-                <span className="text-[10px] text-neutral-500 leading-tight">Jeda natural pada koma (+0.3s) & titik (+0.7s)</span>
+                <span className="text-[10px] text-neutral-500 leading-tight">Jeda natural pada tanda baca</span>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input
@@ -290,6 +297,100 @@ export default function ScriptEditor({
                 <div className="w-9 h-5 bg-neutral-800 peer-focus:outline-none rounded-none peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-neutral-300 after:border-neutral-300 after:border after:rounded-none after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600 peer-checked:after:bg-white" />
               </label>
             </div>
+
+            {autoPacing && (
+              <div className="mt-1 pt-3 border-t border-neutral-900 flex flex-col gap-3 text-xs animate-slideDown" id="punc-custom-durations">
+                {/* Comma slider */}
+                <div className="flex flex-col gap-1">
+                  <div className="flex justify-between items-center text-[10px] text-neutral-400">
+                    <span className="font-semibold text-neutral-300">Jeda Koma ( , - )</span>
+                    <span className="font-bold text-emerald-400">{(punctuationDurations.comma / 1000).toFixed(1)}s</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="3000"
+                    step="100"
+                    value={punctuationDurations.comma}
+                    onChange={(e) => onChangePunctuationDurations({ ...punctuationDurations, comma: parseInt(e.target.value) })}
+                    className="w-full h-1 accent-emerald-500 cursor-pointer bg-neutral-800 rounded-lg"
+                    id="slider-punc-comma"
+                  />
+                </div>
+
+                {/* Period slider */}
+                <div className="flex flex-col gap-1">
+                  <div className="flex justify-between items-center text-[10px] text-neutral-400">
+                    <span className="font-semibold text-neutral-300">Jeda Titik ( . 。 )</span>
+                    <span className="font-bold text-emerald-400">{(punctuationDurations.period / 1000).toFixed(1)}s</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="3000"
+                    step="100"
+                    value={punctuationDurations.period}
+                    onChange={(e) => onChangePunctuationDurations({ ...punctuationDurations, period: parseInt(e.target.value) })}
+                    className="w-full h-1 accent-emerald-500 cursor-pointer bg-neutral-800 rounded-lg"
+                    id="slider-punc-period"
+                  />
+                </div>
+
+                {/* Question mark slider */}
+                <div className="flex flex-col gap-1">
+                  <div className="flex justify-between items-center text-[10px] text-neutral-400">
+                    <span className="font-semibold text-neutral-300">Jeda Tanya ( ? ？ )</span>
+                    <span className="font-bold text-emerald-400">{(punctuationDurations.question / 1000).toFixed(1)}s</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="3000"
+                    step="100"
+                    value={punctuationDurations.question}
+                    onChange={(e) => onChangePunctuationDurations({ ...punctuationDurations, question: parseInt(e.target.value) })}
+                    className="w-full h-1 accent-emerald-500 cursor-pointer bg-neutral-800 rounded-lg"
+                    id="slider-punc-question"
+                  />
+                </div>
+
+                {/* Exclamation mark slider */}
+                <div className="flex flex-col gap-1">
+                  <div className="flex justify-between items-center text-[10px] text-neutral-400">
+                    <span className="font-semibold text-neutral-300">Jeda Seru ( ! ！ )</span>
+                    <span className="font-bold text-emerald-400">{(punctuationDurations.exclamation / 1000).toFixed(1)}s</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="3000"
+                    step="100"
+                    value={punctuationDurations.exclamation}
+                    onChange={(e) => onChangePunctuationDurations({ ...punctuationDurations, exclamation: parseInt(e.target.value) })}
+                    className="w-full h-1 accent-emerald-500 cursor-pointer bg-neutral-800 rounded-lg"
+                    id="slider-punc-exclamation"
+                  />
+                </div>
+
+                {/* Colon/Semicolon slider */}
+                <div className="flex flex-col gap-1">
+                  <div className="flex justify-between items-center text-[10px] text-neutral-400">
+                    <span className="font-semibold text-neutral-300">Jeda Titik Dua & Koma ( : ; )</span>
+                    <span className="font-bold text-emerald-400">{(punctuationDurations.colonSemicolon / 1000).toFixed(1)}s</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="3000"
+                    step="100"
+                    value={punctuationDurations.colonSemicolon}
+                    onChange={(e) => onChangePunctuationDurations({ ...punctuationDurations, colonSemicolon: parseInt(e.target.value) })}
+                    className="w-full h-1 accent-emerald-500 cursor-pointer bg-neutral-800 rounded-lg"
+                    id="slider-punc-colon"
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

@@ -3,7 +3,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { PrompterWord, PrompterPhrase } from "../types";
+import { PrompterWord, PrompterPhrase, PunctuationDurations } from "../types";
+
+export const DEFAULT_PUNCTUATION_DURATIONS: PunctuationDurations = {
+  comma: 300,
+  period: 700,
+  question: 800,
+  exclamation: 800,
+  colonSemicolon: 700
+};
 
 /**
  * Parses raw text into an array of PrompterWord items, tracking timing, custom pauses, and holds.
@@ -11,9 +19,12 @@ import { PrompterWord, PrompterPhrase } from "../types";
 export function parseScript(
   text: string,
   wpm: number,
-  autoPunctuationPause: boolean
+  autoPunctuationPause: boolean,
+  customDurations?: PunctuationDurations
 ): PrompterWord[] {
   if (!text || text.trim() === "") return [];
+
+  const durations = customDurations || DEFAULT_PUNCTUATION_DURATIONS;
 
   // Regex to match pause tags, hold tags, or standard words
   const tokenRegex = /(\[pause:[\d.]+s?\]|<pause:[\d.]+s?>|\[hold\]|<hold>|[^\s]+)/gi;
@@ -54,23 +65,29 @@ export function parseScript(
       let puncPauseMs = 0;
       if (autoPunctuationPause) {
         if (wordText.endsWith(",") || wordText.endsWith("，") || wordText.endsWith("-")) {
-          puncPauseMs = 300;
+          puncPauseMs = durations.comma;
         } else if (
           wordText.endsWith(".") ||
-          wordText.endsWith("。") ||
+          wordText.endsWith("。")
+        ) {
+          puncPauseMs = durations.period;
+        } else if (
           wordText.endsWith(":") ||
           wordText.endsWith("：") ||
           wordText.endsWith(";") ||
           wordText.endsWith("；")
         ) {
-          puncPauseMs = 700;
+          puncPauseMs = durations.colonSemicolon;
         } else if (
           wordText.endsWith("?") ||
-          wordText.endsWith("？") ||
+          wordText.endsWith("？")
+        ) {
+          puncPauseMs = durations.question;
+        } else if (
           wordText.endsWith("!") ||
           wordText.endsWith("！")
         ) {
-          puncPauseMs = 800;
+          puncPauseMs = durations.exclamation;
         }
       }
 

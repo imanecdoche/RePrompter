@@ -82,6 +82,23 @@ export default function PrompterDisplay({
   );
   const activePhrase = phrases[activePhraseIndex] || phrases[0] || { text: "", words: [] };
 
+  const getWordTooltip = (w: PrompterWord) => {
+    const parts: string[] = [];
+    if (w.customPauseMs > 0) {
+      parts.push(`Jeda Tag (Pause): ${(w.customPauseMs / 1000).toFixed(1)} detik`);
+    }
+    if (w.punctuationPauseMs > 0) {
+      parts.push(`Jeda Tanda Baca Otomatis: ${(w.punctuationPauseMs / 1000).toFixed(1)} detik`);
+    }
+    if (w.isHold) {
+      parts.push(`Tag Tahan (Hold): Menghentikan prompter di sini sampai Anda menekan Selanjutnya`);
+    }
+    if (parts.length > 0) {
+      return `${w.text} (${parts.join(", ")})`;
+    }
+    return undefined;
+  };
+
   // Theme styles mapper
   const getThemeClasses = () => {
     switch (visualConfig.theme) {
@@ -244,9 +261,20 @@ export default function PrompterDisplay({
                 style={{
                   color: activeWord.isHold && isHolding ? "#f87171" : visualConfig.highlightColor
                 }}
-                className={getFocalHighlightClasses(true)}
+                className={`${getFocalHighlightClasses(true)} inline-flex items-center gap-1.5`}
+                title={getWordTooltip(activeWord)}
               >
-                {activeWord.text}
+                <span>{activeWord.text}</span>
+                {activeWord.customPauseMs > 0 && (
+                  <span className="text-sm text-yellow-400 font-normal opacity-90 select-none cursor-help" title={`Jeda Tag: ${(activeWord.customPauseMs / 1000).toFixed(1)} detik`}>
+                    ⏱️
+                  </span>
+                )}
+                {activeWord.isHold && (
+                  <span className="text-sm text-red-400 font-normal opacity-90 select-none cursor-help" title="Tag Tahan (Hold) Aktif">
+                    🛑
+                  </span>
+                )}
               </span>
 
               {/* Subdued surrounding hint (next word context) to reduce cognitive load */}
@@ -264,6 +292,8 @@ export default function PrompterDisplay({
             <div className="text-center flex flex-wrap justify-center gap-x-4 gap-y-2 max-w-2xl leading-relaxed" id="phrase-box">
               {activePhrase.words && activePhrase.words.map((w: PrompterWord) => {
                 const isWordActive = w.index === currentIndex;
+                const hasPause = w.customPauseMs > 0;
+                const hasHold = w.isHold;
                 return (
                   <span
                     key={w.id}
@@ -278,9 +308,20 @@ export default function PrompterDisplay({
                             fontSize: `${visualConfig.fontSize * 0.9}px`
                           }
                     }
-                    className={`${getFocalHighlightClasses(isWordActive)} inline-block transition-all`}
+                    className={`${getFocalHighlightClasses(isWordActive)} inline-flex items-center gap-1 transition-all cursor-help`}
+                    title={getWordTooltip(w)}
                   >
-                    {w.text}
+                    <span>{w.text}</span>
+                    {hasPause && (
+                      <span className="text-xs text-yellow-400 font-normal opacity-85 select-none" title={`Jeda Tag: ${(w.customPauseMs / 1000).toFixed(1)} detik`}>
+                        ⏱️
+                      </span>
+                    )}
+                    {hasHold && (
+                      <span className="text-xs text-red-400 font-normal opacity-85 select-none" title="Tag Tahan (Hold) Aktif">
+                        🛑
+                      </span>
+                    )}
                   </span>
                 );
               })}
@@ -303,6 +344,8 @@ export default function PrompterDisplay({
                 {words.map((w) => {
                   const isWordActive = w.index === currentIndex;
                   const isWordRef = isWordActive ? activeWordRef : null;
+                  const hasPause = w.customPauseMs > 0;
+                  const hasHold = w.isHold;
 
                   return (
                     <span
@@ -327,9 +370,20 @@ export default function PrompterDisplay({
                                 }
                             )
                       }
-                      className={`${getFocalHighlightClasses(isWordActive)} inline-block transition-all`}
+                      className={`${getFocalHighlightClasses(isWordActive)} inline-flex items-center gap-1 transition-all cursor-help`}
+                      title={getWordTooltip(w)}
                     >
-                      {w.text}
+                      <span>{w.text}</span>
+                      {hasPause && (
+                        <span className="text-xs text-yellow-400 font-normal opacity-85 select-none" title={`Jeda Tag: ${(w.customPauseMs / 1000).toFixed(1)} detik`}>
+                          ⏱️
+                        </span>
+                      )}
+                      {hasHold && (
+                        <span className="text-xs text-red-400 font-normal opacity-85 select-none" title="Tag Tahan (Hold) Aktif">
+                          🛑
+                        </span>
+                      )}
                     </span>
                   );
                 })}

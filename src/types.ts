@@ -22,6 +22,14 @@ export interface PrompterWord {
   startTimeMs: number;        // Cached start time from the beginning of the play session
 }
 
+export interface PunctuationDurations {
+  comma: number;
+  period: number;
+  question: number;
+  exclamation: number;
+  colonSemicolon: number;
+}
+
 export interface PrompterPhrase {
   id: string;
   words: PrompterWord[];

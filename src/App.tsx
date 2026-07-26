@@ -458,20 +458,6 @@ export default function App() {
     return () => unsubscribe();
   }, [premoRole, premoCode, premoPaired]);
 
-  // Controller periodic status sync when playing to prevent sync drift
-  useEffect(() => {
-    if (premoRole === "controller" && premoPaired && isPlaying) {
-      const interval = setInterval(() => {
-        broadcastPremoState("heartbeat", {
-          isPlaying,
-          currentIndex,
-          elapsedTimeMs
-        });
-      }, 2500);
-      return () => clearInterval(interval);
-    }
-  }, [premoRole, premoPaired, isPlaying, currentIndex, elapsedTimeMs]);
-
   // Controller config change sync
   useEffect(() => {
     if (premoRole === "controller" && premoPaired && premoCode) {
@@ -492,101 +478,108 @@ export default function App() {
 
   // Monitor realtime sync listener
   const lastActionTimeRef = useRef<number>(0);
+
+  // Store actions in ref to prevent snapshot listener resubscription during playback
+  const prompterActionsRef = useRef({
+    play,
+    pause,
+    reset,
+    setIndex,
+    skipNext,
+    skipPrev,
+    handlePremoDisconnect
+  });
+
+  useEffect(() => {
+    prompterActionsRef.current = {
+      play,
+      pause,
+      reset,
+      setIndex,
+      skipNext,
+      skipPrev,
+      handlePremoDisconnect
+    };
+  });
+
   useEffect(() => {
     if (premoRole !== "monitor" || !premoPaired || !premoCode) return;
 
     const docRef = doc(db, "premoSessions", premoCode);
     const unsubscribe = onSnapshot(docRef, (snapshot) => {
       if (!snapshot.exists()) {
-        handlePremoDisconnect();
+        prompterActionsRef.current.handlePremoDisconnect();
         return;
       }
       const data = snapshot.data();
       if (!data.isPaired) {
-        handlePremoDisconnect();
+        prompterActionsRef.current.handlePremoDisconnect();
         return;
       }
       const remote = data.state;
-      if (remote) {
-        if (remote.scriptText !== undefined && remote.scriptText !== scriptText) {
-          setScriptText(remote.scriptText);
-        }
-        if (remote.wpm !== undefined && remote.wpm !== wpm) {
-          setWpm(remote.wpm);
-        }
-        if (remote.autoPacing !== undefined && remote.autoPacing !== autoPacing) {
-          setAutoPacing(remote.autoPacing);
-        }
-        if (remote.mode !== undefined && remote.mode !== mode) {
-          setMode(remote.mode);
-        }
-        if (remote.maxWordsPerPhrase !== undefined && remote.maxWordsPerPhrase !== maxWordsPerPhrase) {
-          setMaxWordsPerPhrase(remote.maxWordsPerPhrase);
-        }
-        if (remote.punctuationDurations !== undefined && JSON.stringify(remote.punctuationDurations) !== JSON.stringify(punctuationDurations)) {
-          setPunctuationDurations(remote.punctuationDurations);
-        }
-        if (remote.visualConfig !== undefined && JSON.stringify(remote.visualConfig) !== JSON.stringify(visualConfig)) {
-          setVisualConfig(remote.visualConfig);
-        }
+      if (!remote) return;
 
-        if (remote.lastActionTime > lastActionTimeRef.current) {
-          lastActionTimeRef.current = remote.lastActionTime;
-          const action = remote.action;
-          if (action === "reset") {
-            reset();
-          } else if (action === "skipNext") {
-            skipNext();
-          } else if (action === "skipPrev") {
-            skipPrev();
-          } else if (action === "setIndex" && remote.currentIndex !== undefined) {
+      // 1. Synchronize script text and visual settings
+      setScriptText((prev) => (remote.scriptText !== undefined && remote.scriptText !== prev ? remote.scriptText : prev));
+      setWpm((prev) => (remote.wpm !== undefined && remote.wpm !== prev ? remote.wpm : prev));
+      setAutoPacing((prev) => (remote.autoPacing !== undefined && remote.autoPacing !== prev ? remote.autoPacing : prev));
+      setMode((prev) => (remote.mode !== undefined && remote.mode !== prev ? remote.mode : prev));
+      setMaxWordsPerPhrase((prev) => (remote.maxWordsPerPhrase !== undefined && remote.maxWordsPerPhrase !== prev ? remote.maxWordsPerPhrase : prev));
+      setPunctuationDurations((prev) => {
+        if (remote.punctuationDurations !== undefined && JSON.stringify(remote.punctuationDurations) !== JSON.stringify(prev)) {
+          return remote.punctuationDurations;
+        }
+        return prev;
+      });
+      setVisualConfig((prev) => {
+        if (remote.visualConfig !== undefined && JSON.stringify(remote.visualConfig) !== JSON.stringify(prev)) {
+          return remote.visualConfig;
+        }
+        return prev;
+      });
+
+      // 2. Process discrete remote play/pause/reset/navigation actions
+      if (remote.lastActionTime && remote.lastActionTime > lastActionTimeRef.current) {
+        lastActionTimeRef.current = remote.lastActionTime;
+        const { play, pause, reset, setIndex, skipNext, skipPrev } = prompterActionsRef.current;
+        const action = remote.action;
+
+        if (action === "play") {
+          if (remote.currentIndex !== undefined) {
             setIndex(remote.currentIndex);
-          } else if (action === "play") {
+          }
+          play();
+        } else if (action === "pause") {
+          pause();
+          if (remote.currentIndex !== undefined) {
+            setIndex(remote.currentIndex);
+          }
+        } else if (action === "reset") {
+          reset();
+        } else if (action === "skipNext") {
+          skipNext();
+        } else if (action === "skipPrev") {
+          skipPrev();
+        } else if (action === "setIndex" && remote.currentIndex !== undefined) {
+          setIndex(remote.currentIndex);
+        } else if (action === "init") {
+          if (remote.currentIndex !== undefined) {
+            setIndex(remote.currentIndex);
+          }
+          if (remote.isPlaying) {
             play();
-            if (remote.currentIndex !== undefined) setIndex(remote.currentIndex);
-          } else if (action === "pause") {
+          } else {
             pause();
-            if (remote.currentIndex !== undefined) setIndex(remote.currentIndex);
-          }
-        } else {
-          if (remote.isPlaying !== isPlaying) {
-            if (remote.isPlaying) {
-              play();
-            } else {
-              pause();
-            }
-          }
-          if (remote.currentIndex !== undefined && remote.currentIndex !== currentIndex) {
-            setIndex(remote.currentIndex);
           }
         }
       }
     }, (error) => {
       console.error("Error in monitor snapshot listener:", error);
-      handlePremoDisconnect();
+      prompterActionsRef.current.handlePremoDisconnect();
     });
 
     return () => unsubscribe();
-  }, [
-    premoRole,
-    premoPaired,
-    premoCode,
-    scriptText,
-    wpm,
-    autoPacing,
-    mode,
-    maxWordsPerPhrase,
-    punctuationDurations,
-    visualConfig,
-    isPlaying,
-    currentIndex,
-    play,
-    pause,
-    reset,
-    skipNext,
-    skipPrev,
-    setIndex
-  ]);
+  }, [premoRole, premoPaired, premoCode]);
 
   // 6. Global keyboard listener (Bypassed when typing in inputs)
   useEffect(() => {

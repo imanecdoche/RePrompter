@@ -21,7 +21,10 @@ import {
   HelpCircle,
   Clock,
   Maximize,
-  Minimize
+  Minimize,
+  Tv,
+  Smartphone,
+  Gamepad2
 } from "lucide-react";
 
 import { PrompterMode, VisualConfig, PunctuationDurations } from "./types";
@@ -58,6 +61,15 @@ const getSavedConfig = (): SavedConfig | null => {
 
 export default function App() {
   const savedConfig = useMemo(() => getSavedConfig(), []);
+
+  // PREMO States
+  const [premoRole, setPremoRole] = useState<"none" | "controller" | "monitor">("none");
+  const [premoCode, setPremoCode] = useState<string>("");
+  const [premoPaired, setPremoPaired] = useState<boolean>(false);
+  const [premoError, setPremoError] = useState<string>("");
+  const [premoShowSetup, setPremoShowSetup] = useState<boolean>(false);
+  const [premoMonitorInput, setPremoMonitorInput] = useState<string>("");
+  const [premoLoading, setPremoLoading] = useState<boolean>(false);
 
   // 1. Script & Pacing States
   const [scriptText, setScriptText] = useState<string>(INITIAL_SCRIPT);
@@ -202,38 +214,430 @@ export default function App() {
     currentIndex,
     elapsedTimeMs,
     isHolding,
+    play,
+    pause,
     togglePlay,
     reset,
+    setIndex,
     skipNext,
     skipPrev,
     setGestureHolding
   } = usePrompterEngine(words);
 
+  // Wrapped PREMO actions that sync state
+  const broadcastPremoState = async (action: string, extraFields: any = {}) => {
+    if (!premoCode) return;
+    try {
+      const payload = {
+        state: {
+          action,
+          lastActionTime: Date.now(),
+          isPlaying: extraFields.isPlaying !== undefined ? extraFields.isPlaying : isPlaying,
+          currentIndex: extraFields.currentIndex !== undefined ? extraFields.currentIndex : currentIndex,
+          elapsedTimeMs: extraFields.elapsedTimeMs !== undefined ? extraFields.elapsedTimeMs : elapsedTimeMs,
+          isHolding: extraFields.isHolding !== undefined ? extraFields.isHolding : isHolding,
+          scriptText,
+          wpm,
+          autoPacing,
+          mode,
+          maxWordsPerPhrase,
+          punctuationDurations,
+          visualConfig,
+          ...extraFields
+        }
+      };
+      await fetch(`/api/premo/update/${premoCode}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+    } catch (e) {
+      console.error("Gagal mengirim sinkronisasi PREMO", e);
+    }
+  };
+
+  const handleTogglePlay = () => {
+    togglePlay();
+    if (premoRole === "controller" && premoPaired) {
+      broadcastPremoState(isPlaying ? "pause" : "play", {
+        isPlaying: !isPlaying,
+        currentIndex,
+        elapsedTimeMs
+      });
+    }
+  };
+
+  const handlePause = () => {
+    pause();
+    if (premoRole === "controller" && premoPaired) {
+      broadcastPremoState("pause", {
+        isPlaying: false,
+        currentIndex,
+        elapsedTimeMs
+      });
+    }
+  };
+
+  const handlePlay = () => {
+    play();
+    if (premoRole === "controller" && premoPaired) {
+      broadcastPremoState("play", {
+        isPlaying: true,
+        currentIndex,
+        elapsedTimeMs
+      });
+    }
+  };
+
+  const handleReset = () => {
+    reset();
+    if (premoRole === "controller" && premoPaired) {
+      broadcastPremoState("reset", {
+        isPlaying: false,
+        currentIndex: 0,
+        elapsedTimeMs: 0
+      });
+    }
+  };
+
+  const handleSkipNext = () => {
+    skipNext();
+    if (premoRole === "controller" && premoPaired) {
+      const nextIndex = Math.min(words.length - 1, currentIndex + 1);
+      broadcastPremoState("skipNext", {
+        currentIndex: nextIndex,
+        elapsedTimeMs: words[nextIndex]?.startTimeMs || 0
+      });
+    }
+  };
+
+  const handleSkipPrev = () => {
+    skipPrev();
+    if (premoRole === "controller" && premoPaired) {
+      const prevIndex = Math.max(0, currentIndex - 1);
+      broadcastPremoState("skipPrev", {
+        currentIndex: prevIndex,
+        elapsedTimeMs: words[prevIndex]?.startTimeMs || 0
+      });
+    }
+  };
+
+  const handleSetIndex = (idx: number) => {
+    setIndex(idx);
+    if (premoRole === "controller" && premoPaired) {
+      broadcastPremoState("setIndex", {
+        currentIndex: idx,
+        elapsedTimeMs: words[idx]?.startTimeMs || 0
+      });
+    }
+  };
+
+  const handlePremoDisconnect = async () => {
+    if (premoCode) {
+      try {
+        await fetch(`/api/premo/disconnect/${premoCode}`, { method: "POST" });
+      } catch (e) {
+        console.error("Error sending disconnect request", e);
+      }
+    }
+    setPremoRole("none");
+    setPremoCode("");
+    setPremoPaired(false);
+    setPremoError("");
+    setPremoMonitorInput("");
+    setIsFocusMode(false);
+  };
+
+  const handleRegisterController = async () => {
+    setPremoLoading(true);
+    setPremoError("");
+    try {
+      const response = await fetch("/api/premo/register", { method: "POST" });
+      const data = await response.json();
+      if (data.success) {
+        setPremoCode(data.code);
+        setPremoRole("controller");
+        setPremoPaired(false);
+        setPremoShowSetup(true);
+      } else {
+        setPremoError("Gagal mendaftarkan sesi. Silakan coba lagi.");
+      }
+    } catch (e) {
+      console.error("Error registering controller", e);
+      setPremoError("Koneksi gagal. Pastikan server aktif.");
+    } finally {
+      setPremoLoading(false);
+    }
+  };
+
+  const handlePairMonitor = async () => {
+    if (premoMonitorInput.length < 4) return;
+    setPremoLoading(true);
+    setPremoError("");
+    try {
+      const response = await fetch("/api/premo/pair", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: premoMonitorInput })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setPremoCode(premoMonitorInput);
+        setPremoPaired(true);
+        setPremoShowSetup(false);
+        setIsFocusMode(true);
+      } else {
+        setPremoError(data.error || "Gagal menghubungkan. Periksa kode pairing.");
+      }
+    } catch (e) {
+      console.error("Error pairing monitor", e);
+      setPremoError("Gagal menghubungkan ke server. Pastikan kode benar.");
+    } finally {
+      setPremoLoading(false);
+    }
+  };
+
+  // Controller pairing poll effect
+  useEffect(() => {
+    if (premoRole !== "controller" || premoPaired || !premoCode) return;
+    let active = true;
+    const pollPairing = async () => {
+      try {
+        const response = await fetch(`/api/premo/poll/${premoCode}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.isPaired && active) {
+            setPremoPaired(true);
+            setPremoShowSetup(false);
+            // Broadcast initial configuration immediately
+            broadcastPremoState("init", {
+              scriptText,
+              wpm,
+              autoPacing,
+              mode,
+              maxWordsPerPhrase,
+              punctuationDurations,
+              visualConfig
+            });
+          }
+        }
+      } catch (e) {
+        console.error("Error polling pairing status", e);
+      }
+    };
+    const interval = setInterval(pollPairing, 1000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [premoRole, premoPaired, premoCode]);
+
+  // Controller periodic heartbeat
+  useEffect(() => {
+    if (premoRole === "controller" && premoPaired && isPlaying) {
+      const interval = setInterval(() => {
+        broadcastPremoState("heartbeat", {
+          isPlaying,
+          currentIndex,
+          elapsedTimeMs
+        });
+      }, 800);
+      return () => clearInterval(interval);
+    }
+  }, [premoRole, premoPaired, isPlaying, currentIndex, elapsedTimeMs]);
+
+  // Controller config change sync
+  useEffect(() => {
+    if (premoRole === "controller" && premoPaired && premoCode) {
+      const timer = setTimeout(() => {
+        broadcastPremoState("config", {
+          scriptText,
+          wpm,
+          autoPacing,
+          mode,
+          maxWordsPerPhrase,
+          punctuationDurations,
+          visualConfig
+        });
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [scriptText, wpm, autoPacing, mode, maxWordsPerPhrase, punctuationDurations, visualConfig, premoRole, premoPaired, premoCode]);
+
+  // Controller alive check
+  useEffect(() => {
+    if (premoRole !== "controller" || !premoPaired || !premoCode) return;
+    let active = true;
+    const checkSession = async () => {
+      try {
+        const response = await fetch(`/api/premo/poll/${premoCode}`);
+        if (!response.ok && response.status === 404 && active) {
+          handlePremoDisconnect();
+        }
+      } catch (e) {
+        console.error("Error checking session", e);
+      }
+    };
+    const interval = setInterval(checkSession, 3000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [premoRole, premoPaired, premoCode]);
+
+  // Monitor polling and syncing
+  const lastActionTimeRef = useRef<number>(0);
+  useEffect(() => {
+    if (premoRole !== "monitor" || !premoPaired || !premoCode) return;
+    let active = true;
+    const poll = async () => {
+      try {
+        const response = await fetch(`/api/premo/poll/${premoCode}`);
+        if (!response.ok && response.status === 404 && active) {
+          handlePremoDisconnect();
+          return;
+        }
+        const data = await response.json();
+        if (data.success && active) {
+          if (!data.isPaired) {
+            handlePremoDisconnect();
+            return;
+          }
+          const remote = data.state;
+          if (remote) {
+            if (remote.scriptText !== undefined && remote.scriptText !== scriptText) {
+              setScriptText(remote.scriptText);
+            }
+            if (remote.wpm !== undefined && remote.wpm !== wpm) {
+              setWpm(remote.wpm);
+            }
+            if (remote.autoPacing !== undefined && remote.autoPacing !== autoPacing) {
+              setAutoPacing(remote.autoPacing);
+            }
+            if (remote.mode !== undefined && remote.mode !== mode) {
+              setMode(remote.mode);
+            }
+            if (remote.maxWordsPerPhrase !== undefined && remote.maxWordsPerPhrase !== maxWordsPerPhrase) {
+              setMaxWordsPerPhrase(remote.maxWordsPerPhrase);
+            }
+            if (remote.punctuationDurations !== undefined && JSON.stringify(remote.punctuationDurations) !== JSON.stringify(punctuationDurations)) {
+              setPunctuationDurations(remote.punctuationDurations);
+            }
+            if (remote.visualConfig !== undefined && JSON.stringify(remote.visualConfig) !== JSON.stringify(visualConfig)) {
+              setVisualConfig(remote.visualConfig);
+            }
+
+            if (remote.lastActionTime > lastActionTimeRef.current) {
+              lastActionTimeRef.current = remote.lastActionTime;
+              const action = remote.action;
+              if (action === "reset") {
+                reset();
+              } else if (action === "skipNext") {
+                skipNext();
+              } else if (action === "skipPrev") {
+                skipPrev();
+              } else if (action === "setIndex" && remote.currentIndex !== undefined) {
+                setIndex(remote.currentIndex);
+              } else if (action === "play") {
+                play();
+                if (remote.currentIndex !== undefined) setIndex(remote.currentIndex);
+              } else if (action === "pause") {
+                pause();
+                if (remote.currentIndex !== undefined) setIndex(remote.currentIndex);
+              }
+            } else {
+              if (remote.isPlaying !== isPlaying) {
+                if (remote.isPlaying) {
+                  play();
+                } else {
+                  pause();
+                }
+              }
+              if (remote.currentIndex !== undefined && remote.currentIndex !== currentIndex) {
+                setIndex(remote.currentIndex);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Gagal melakukan sinkronisasi PREMO", e);
+      }
+    };
+    const interval = setInterval(poll, 200);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [
+    premoRole,
+    premoPaired,
+    premoCode,
+    scriptText,
+    wpm,
+    autoPacing,
+    mode,
+    maxWordsPerPhrase,
+    punctuationDurations,
+    visualConfig,
+    isPlaying,
+    currentIndex,
+    play,
+    pause,
+    reset,
+    skipNext,
+    skipPrev,
+    setIndex
+  ]);
+
   // 6. Global keyboard listener (Bypassed when typing in inputs)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if user is writing in any input or textarea
       const targetTag = (e.target as HTMLElement).tagName;
       if (targetTag === "TEXTAREA" || targetTag === "INPUT") {
+        return;
+      }
+
+      // Overriding shortcuts for PREMO Controller mode as requested
+      if (premoRole === "controller" && premoPaired) {
+        switch (e.key) {
+          case "ArrowUp":
+            e.preventDefault();
+            handleReset();
+            break;
+          case "ArrowDown":
+            e.preventDefault();
+            handlePause();
+            break;
+          case "ArrowLeft":
+            e.preventDefault();
+            handleSkipPrev();
+            break;
+          case "ArrowRight":
+            e.preventDefault();
+            handleSkipNext();
+            break;
+          default:
+            break;
+        }
         return;
       }
 
       switch (e.key) {
         case " ":
           e.preventDefault();
-          togglePlay();
+          handleTogglePlay();
           break;
         case "ArrowRight":
           e.preventDefault();
-          skipNext();
+          handleSkipNext();
           break;
         case "ArrowLeft":
           e.preventDefault();
-          skipPrev();
+          handleSkipPrev();
           break;
         case "Escape":
           e.preventDefault();
-          reset();
+          handleReset();
           break;
         case "f":
         case "F":
@@ -249,12 +653,12 @@ export default function App() {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [togglePlay, skipNext, skipPrev, reset, setIsFocusMode]);
+  }, [handleTogglePlay, handleSkipNext, handleSkipPrev, handleReset, handlePause, setIsFocusMode, premoRole, premoPaired, words, currentIndex]);
 
   return (
     <div className="min-h-screen bg-[#09090b] text-neutral-100 flex flex-col font-sans" id="rhythmprompter-app-root">
       {/* FLOATING CONTROLS (ONLY IN FOCUS MODE) - Moves to bottom if prompter is dragged/shifted upwards */}
-      {isFocusMode && (
+      {isFocusMode && premoRole !== "monitor" && (
         <div 
           className={`fixed right-4 z-50 flex items-center gap-2 transition-all duration-300 ${
             focusDragOffset < -50 ? "bottom-4 animate-slideUp" : "top-4"
@@ -285,21 +689,101 @@ export default function App() {
         </div>
       )}
 
+      {/* PREMO MONITOR MODE EXCLUSIVE FLOATING BAR */}
+      {isFocusMode && premoRole === "monitor" && premoPaired && (
+        <div 
+          className={`fixed left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-neutral-950/95 border border-neutral-800 px-4 py-2 shadow-2xl transition-all duration-300 ${
+            (visualConfig.textPosition === "top" || focusDragOffset < -50) ? "bottom-4 animate-slideUp" : "top-4"
+          }`}
+          id="premo-monitor-bar"
+        >
+          <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 tracking-wider uppercase select-none">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            PAIRED
+          </div>
+          <span className="w-px h-4 bg-neutral-800" />
+          <button
+            onClick={toggleFullscreen}
+            className="p-1.5 text-neutral-400 hover:text-white transition active:scale-95 cursor-pointer"
+            title={isFullscreen ? "Keluar Layar Penuh" : "Masuk Layar Penuh"}
+            id="premo-monitor-fullscreen-btn"
+          >
+            {isFullscreen ? (
+              <Minimize className="w-4 h-4 text-emerald-400" />
+            ) : (
+              <Maximize className="w-4 h-4 text-emerald-400" />
+            )}
+          </button>
+          <button
+            onClick={handlePremoDisconnect}
+            className="p-1.5 text-neutral-400 hover:text-red-400 transition active:scale-95 cursor-pointer"
+            title="Putuskan Hubungan"
+            id="premo-monitor-disconnect-btn"
+          >
+            <RotateCcw className="w-4 h-4 text-red-500" />
+          </button>
+        </div>
+      )}
+
       {/* BRAND HEADER BAR */}
       {!isFocusMode && (
-        <header className="border-b border-neutral-800 bg-[#0c0c0e] px-4 md:px-8 py-3.5 flex items-center justify-between" id="app-main-header">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-none bg-emerald-500/10 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-black text-sm shadow-[0_0_15px_rgba(16,185,129,0.15)]" id="brand-logo-icon">
-              R
+        <header className="border-b border-neutral-800 bg-[#0c0c0e] px-4 md:px-8 py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-4" id="app-main-header">
+          <div className="flex items-center justify-between md:justify-start gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-none bg-emerald-500/10 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-black text-sm shadow-[0_0_15px_rgba(16,185,129,0.15)]" id="brand-logo-icon">
+                R
+              </div>
+              <div>
+                <h1 className="text-sm font-extrabold tracking-tight text-neutral-100 flex items-center gap-1.5">
+                  RhythmPrompter
+                  <span className="text-[10px] bg-emerald-950 text-emerald-300 px-1.5 py-0.5 rounded-none font-bold border border-emerald-800">
+                    PRO v1.2
+                  </span>
+                </h1>
+                <p className="text-[11px] text-neutral-500 font-medium">Modular speech-paced teleprompter engine</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-sm font-extrabold tracking-tight text-neutral-100 flex items-center gap-1.5">
-                RhythmPrompter
-                <span className="text-[10px] bg-emerald-950 text-emerald-300 px-1.5 py-0.5 rounded-none font-bold border border-emerald-800">
-                  PRO v1.2
-                </span>
-              </h1>
-              <p className="text-[11px] text-neutral-500 font-medium">Modular speech-paced teleprompter engine</p>
+
+            {/* PREMO Mode Actions in Header */}
+            <div className="flex items-center gap-2">
+              {premoRole === "none" && (
+                <button
+                  id="btn-premo-setup"
+                  onClick={() => setPremoShowSetup(true)}
+                  className="px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider bg-purple-950/40 hover:bg-purple-900/60 text-purple-300 hover:text-purple-200 border border-purple-850 hover:border-purple-700 transition flex items-center gap-2 active:scale-95 cursor-pointer shadow"
+                >
+                  <span className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-pulse" />
+                  PREMO Mode
+                </button>
+              )}
+              
+              {premoRole === "controller" && !premoPaired && (
+                <div className="flex items-center gap-2 bg-purple-950/50 text-purple-300 border border-purple-800 px-3 py-1.5 text-xs font-bold uppercase tracking-wider" id="premo-pairing-header">
+                  <span className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" />
+                  PAIRING CODE: {premoCode}
+                  <button
+                    onClick={handlePremoDisconnect}
+                    className="ml-2 pl-2 border-l border-purple-800 hover:text-red-400 font-bold transition text-xs cursor-pointer"
+                    title="Batal Pairing"
+                  >
+                    BATAL
+                  </button>
+                </div>
+              )}
+
+              {premoRole === "controller" && premoPaired && (
+                <div className="flex items-center gap-2 bg-emerald-950/50 text-emerald-300 border border-emerald-800/80 px-3 py-1.5 text-xs font-bold uppercase tracking-wider" id="premo-paired-header">
+                  <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+                  PAIRED: {premoCode}
+                  <button
+                    onClick={handlePremoDisconnect}
+                    className="ml-2 pl-2 border-l border-emerald-800 hover:text-red-400 font-bold transition text-xs cursor-pointer"
+                    title="Putuskan Hubungan"
+                  >
+                    DISCONNECT
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -371,10 +855,10 @@ export default function App() {
             isPlaying={isPlaying}
             isHolding={isHolding}
             visualConfig={visualConfig}
-            onTriggerNext={skipNext}
-            onTriggerPrev={skipPrev}
+            onTriggerNext={handleSkipNext}
+            onTriggerPrev={handleSkipPrev}
             onHoldActive={setGestureHolding}
-            onTogglePlay={togglePlay}
+            onTogglePlay={handleTogglePlay}
             isFocusMode={isFocusMode}
             onDragStart={handleFocusDragStart}
             onDragMove={handleFocusDragMove}
@@ -383,81 +867,83 @@ export default function App() {
           />
 
           {/* LOWER CONTROLLER HUB */}
-          <div 
-            className={isFocusMode
-              ? "flex items-center justify-center p-2 mt-4"
-              : "bg-neutral-900 border border-neutral-800 p-4 rounded-none flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg shadow-black/40"
-            } 
-            id="prompter-control-hub"
-          >
-            {/* Playback navigation buttons */}
-            <div className="flex items-center gap-3.5" id="play-buttons-group">
-              <button
-                id="btn-nav-prev"
-                onClick={skipPrev}
-                disabled={currentIndex === 0}
-                className="w-12 h-12 flex items-center justify-center bg-neutral-950 border border-neutral-800/80 text-neutral-400 hover:text-white disabled:opacity-30 disabled:hover:text-neutral-400 rounded-none transition active:scale-95 shadow-md"
-                title="Sebelumnya"
-              >
-                <ChevronLeft className="w-6 h-6" />
-              </button>
+          {(!isFocusMode || premoRole !== "monitor") && (
+            <div 
+              className={isFocusMode
+                ? "flex items-center justify-center p-2 mt-4"
+                : "bg-neutral-900 border border-neutral-800 p-4 rounded-none flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg shadow-black/40"
+              } 
+              id="prompter-control-hub"
+            >
+              {/* Playback navigation buttons */}
+              <div className="flex items-center gap-3.5" id="play-buttons-group">
+                <button
+                  id="btn-nav-prev"
+                  onClick={handleSkipPrev}
+                  disabled={currentIndex === 0}
+                  className="w-12 h-12 flex items-center justify-center bg-neutral-950 border border-neutral-800/80 text-neutral-400 hover:text-white disabled:opacity-30 disabled:hover:text-neutral-400 rounded-none transition active:scale-95 shadow-md"
+                  title="Sebelumnya"
+                >
+                  <ChevronLeft className="w-6 h-6" />
+                </button>
 
-              <button
-                id="btn-nav-play-toggle"
-                onClick={togglePlay}
-                className={`px-8 py-2.5 h-12 font-bold text-xs rounded-none transition active:scale-95 flex items-center gap-2.5 shadow-xl uppercase tracking-wider ${
-                  isPlaying
-                    ? "bg-amber-600 text-white hover:bg-amber-500 shadow-amber-950/25 border border-amber-500"
-                    : "bg-emerald-500 text-neutral-950 hover:bg-emerald-400 shadow-emerald-950/25 border border-emerald-400"
-                }`}
-              >
-                {isPlaying ? (
-                  <>
-                    <Pause className="w-4 h-4 fill-current" />
-                    <span>PAUSE</span>
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-4 h-4 fill-current" />
-                    <span>MULAI</span>
-                  </>
-                )}
-              </button>
+                <button
+                  id="btn-nav-play-toggle"
+                  onClick={handleTogglePlay}
+                  className={`px-8 py-2.5 h-12 font-bold text-xs rounded-none transition active:scale-95 flex items-center gap-2.5 shadow-xl uppercase tracking-wider ${
+                    isPlaying
+                      ? "bg-amber-600 text-white hover:bg-amber-500 shadow-amber-950/25 border border-amber-500"
+                      : "bg-emerald-500 text-neutral-950 hover:bg-emerald-400 shadow-emerald-950/25 border border-emerald-400"
+                  }`}
+                >
+                  {isPlaying ? (
+                    <>
+                      <Pause className="w-4 h-4 fill-current" />
+                      <span>PAUSE</span>
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-4 h-4 fill-current" />
+                      <span>MULAI</span>
+                    </>
+                  )}
+                </button>
 
-              <button
-                id="btn-nav-next"
-                onClick={skipNext}
-                disabled={words.length === 0}
-                className="w-12 h-12 flex items-center justify-center bg-neutral-950 border border-neutral-800/80 text-neutral-400 hover:text-white disabled:opacity-30 disabled:hover:text-neutral-400 rounded-none transition active:scale-95 shadow-md"
-                title={isHolding ? "Lompati Hold" : "Selanjutnya"}
-              >
-                <ChevronRight className="w-6 h-6" />
-              </button>
+                <button
+                  id="btn-nav-next"
+                  onClick={handleSkipNext}
+                  disabled={words.length === 0}
+                  className="w-12 h-12 flex items-center justify-center bg-neutral-950 border border-neutral-800/80 text-neutral-400 hover:text-white disabled:opacity-30 disabled:hover:text-neutral-400 rounded-none transition active:scale-95 shadow-md"
+                  title={isHolding ? "Lompati Hold" : "Selanjutnya"}
+                >
+                  <ChevronRight className="w-6 h-6" />
+                </button>
 
-              <button
-                id="btn-nav-reset"
-                onClick={reset}
-                className="w-12 h-12 flex items-center justify-center bg-neutral-950 border border-neutral-800/80 text-neutral-400 hover:text-red-400 rounded-none transition hover:border-red-900/30 active:scale-95 shadow-md"
-                title="Reset dari awal"
-              >
-                <RotateCcw className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Time counters display */}
-            {!isFocusMode && (
-              <div className="flex items-center gap-3 bg-neutral-950 px-4 py-2.5 rounded-none border border-neutral-800 w-full sm:w-auto justify-center" id="playtime-stats-overlay">
-                <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Durasi</span>
-                <span className="font-mono font-bold text-sm text-neutral-200">
-                  {formatTime(elapsedTimeMs)}
-                </span>
-                <span className="text-neutral-800 text-sm">/</span>
-                <span className="font-mono text-sm text-neutral-500">
-                  {formatTime(estimatedDurationMs)}
-                </span>
+                <button
+                  id="btn-nav-reset"
+                  onClick={handleReset}
+                  className="w-12 h-12 flex items-center justify-center bg-neutral-950 border border-neutral-800/80 text-neutral-400 hover:text-red-400 rounded-none transition hover:border-red-900/30 active:scale-95 shadow-md"
+                  title="Reset dari awal"
+                >
+                  <RotateCcw className="w-5 h-5" />
+                </button>
               </div>
-            )}
-          </div>
+
+              {/* Time counters display */}
+              {!isFocusMode && (
+                <div className="flex items-center gap-3 bg-neutral-950 px-4 py-2.5 rounded-none border border-neutral-800 w-full sm:w-auto justify-center" id="playtime-stats-overlay">
+                  <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Durasi</span>
+                  <span className="font-mono font-bold text-sm text-neutral-200">
+                    {formatTime(elapsedTimeMs)}
+                  </span>
+                  <span className="text-neutral-800 text-sm">/</span>
+                  <span className="font-mono text-sm text-neutral-500">
+                    {formatTime(estimatedDurationMs)}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
         </section>
 
         {/* RIGHT COLUMN: CONFIG STATION (SCRIPT, STYLING, HOTKEYS) - (Span 5) */}
@@ -787,6 +1273,160 @@ export default function App() {
         <footer className="border-t border-neutral-900 bg-[#070708] py-4 px-6 text-center text-[11px] text-neutral-600 mt-auto" id="app-footer">
           &copy; 2026 RhythmPrompter. Dibuat dengan presisi untuk konten creator modern. All rights reserved.
         </footer>
+      )}
+
+      {/* PREMO SETUP MODAL */}
+      {premoShowSetup && (
+        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn" id="premo-setup-overlay">
+          <div className="w-full max-w-md bg-neutral-950 border border-neutral-800 p-6 shadow-2xl relative" id="premo-setup-modal">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-neutral-800 pb-4 mb-5" id="premo-modal-header">
+              <div className="flex items-center gap-2">
+                <Tv className="w-5 h-5 text-purple-400" />
+                <h3 className="text-sm font-extrabold text-neutral-100 tracking-wider uppercase">PREMO (Previewer & Monitor)</h3>
+              </div>
+              <button 
+                onClick={() => {
+                  setPremoShowSetup(false);
+                  setPremoError("");
+                }} 
+                className="text-neutral-500 hover:text-neutral-300 font-bold text-xs p-1 cursor-pointer"
+                id="premo-modal-close"
+              >
+                TUTUP
+              </button>
+            </div>
+
+            {/* Error messaging */}
+            {premoError && (
+              <div className="mb-4 p-3 bg-red-950/40 border border-red-900/60 text-red-300 text-xs font-bold rounded-none" id="premo-error-msg">
+                {premoError}
+              </div>
+            )}
+
+            {/* Role selection screen (when role is none) */}
+            {premoRole === "none" && (
+              <div className="flex flex-col gap-5" id="premo-role-selector">
+                <p className="text-xs text-neutral-400 leading-relaxed font-medium">
+                  Hubungkan dua perangkat secara nirkabel untuk mengontrol prompter jarak jauh. Satu perangkat bertindak sebagai <strong className="text-purple-300 font-semibold">KONTROLER</strong>, dan perangkat lainnya bertindak sebagai <strong className="text-emerald-400 font-semibold">MONITOR</strong>.
+                </p>
+
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Controller card option */}
+                  <button
+                    onClick={handleRegisterController}
+                    disabled={premoLoading}
+                    className="flex flex-col items-center gap-3 p-5 border border-purple-900/50 hover:border-purple-600 bg-purple-950/20 hover:bg-purple-950/40 text-purple-300 hover:text-white rounded-none transition active:scale-95 text-center group disabled:opacity-50 cursor-pointer"
+                    id="premo-opt-controller"
+                  >
+                    <Gamepad2 className="w-8 h-8 text-purple-400 group-hover:scale-110 transition duration-300" />
+                    <div>
+                      <span className="block text-xs font-bold uppercase tracking-wider">KONTROLER</span>
+                      <span className="block text-[10px] text-neutral-500 mt-1 leading-normal font-medium">Device utama untuk navigasi & play/pause</span>
+                    </div>
+                  </button>
+
+                  {/* Monitor card option */}
+                  <button
+                    onClick={() => {
+                      setPremoRole("monitor");
+                      setPremoError("");
+                    }}
+                    className="flex flex-col items-center gap-3 p-5 border border-emerald-900/40 hover:border-emerald-600 bg-emerald-950/10 hover:bg-emerald-950/20 text-emerald-400 hover:text-white rounded-none transition active:scale-95 text-center group cursor-pointer"
+                    id="premo-opt-monitor"
+                  >
+                    <Smartphone className="w-8 h-8 text-emerald-400 group-hover:scale-110 transition duration-300" />
+                    <div>
+                      <span className="block text-xs font-bold uppercase tracking-wider">MONITOR</span>
+                      <span className="block text-[10px] text-neutral-500 mt-1 leading-normal font-medium">Device layar prompter (Fokus Mode)</span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Controller screen: showing generated pairing code */}
+            {premoRole === "controller" && (
+              <div className="flex flex-col items-center text-center gap-4 py-3" id="premo-controller-setup">
+                <span className="text-[10px] bg-purple-950 text-purple-300 px-2 py-0.5 border border-purple-800 font-bold uppercase tracking-widest">KONTROLER MODE</span>
+                <p className="text-xs text-neutral-400 leading-normal max-w-xs">
+                  Buka PREMO di device kedua, pilih <strong className="text-emerald-400 font-semibold">MONITOR</strong>, lalu masukkan kode berikut untuk menghubungkan:
+                </p>
+
+                {premoLoading ? (
+                  <div className="h-16 flex items-center justify-center font-mono font-bold text-neutral-500 animate-pulse" id="premo-controller-loading">
+                    MEMBUAT KODE...
+                  </div>
+                ) : (
+                  <div className="bg-neutral-900 border border-neutral-800 px-8 py-4 font-mono font-extrabold text-3xl tracking-[0.5em] text-neutral-100 select-all" id="premo-pairing-code-display">
+                    {premoCode || "----"}
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2 text-[10px] text-neutral-500 animate-pulse mt-1" id="premo-controller-status-tip">
+                  <span className="w-1.5 h-1.5 bg-purple-400 rounded-full" />
+                  Menunggu device monitor terhubung...
+                </div>
+
+                <button
+                  onClick={handlePremoDisconnect}
+                  className="mt-4 px-4 py-2 text-xs font-bold uppercase tracking-wider border border-neutral-800 hover:border-neutral-700 hover:text-white text-neutral-400 rounded-none transition active:scale-95 cursor-pointer"
+                  id="premo-cancel-pairing"
+                >
+                  BATAL & RESET
+                </button>
+              </div>
+            )}
+
+            {/* Monitor screen: input pairing code */}
+            {premoRole === "monitor" && (
+              <div className="flex flex-col items-center text-center gap-4 py-3" id="premo-monitor-setup">
+                <span className="text-[10px] bg-emerald-950 text-emerald-400 px-2 py-0.5 border border-emerald-800 font-bold uppercase tracking-widest">MONITOR MODE</span>
+                <p className="text-xs text-neutral-400 leading-normal max-w-xs">
+                  Masukkan 4 digit kode pairing yang tampil di layar perangkat <strong className="text-purple-300 font-semibold">KONTROLER</strong>:
+                </p>
+
+                <input
+                  type="text"
+                  maxLength={4}
+                  value={premoMonitorInput}
+                  onChange={(e) => {
+                    const cleanValue = e.target.value.replace(/[^0-9]/g, "");
+                    setPremoMonitorInput(cleanValue);
+                    setPremoError("");
+                  }}
+                  placeholder="0000"
+                  className="bg-neutral-900 border-2 border-neutral-800 focus:border-emerald-500 text-center text-3xl font-mono font-extrabold tracking-[0.4em] py-3 text-neutral-100 placeholder-neutral-700 rounded-none focus:outline-none w-48 shadow-inner"
+                  id="premo-pairing-input"
+                  disabled={premoLoading}
+                  autoFocus
+                />
+
+                <div className="flex gap-3 w-full mt-3">
+                  <button
+                    onClick={() => {
+                      setPremoRole("none");
+                      setPremoMonitorInput("");
+                      setPremoError("");
+                    }}
+                    className="flex-1 py-2.5 text-xs font-bold border border-neutral-800 hover:border-neutral-700 text-neutral-400 rounded-none transition active:scale-95 cursor-pointer"
+                    id="premo-monitor-back"
+                  >
+                    KEMBALI
+                  </button>
+                  <button
+                    onClick={handlePairMonitor}
+                    disabled={premoMonitorInput.length < 4 || premoLoading}
+                    className="flex-1 py-2.5 text-xs font-bold bg-emerald-500 disabled:bg-neutral-900 text-neutral-950 disabled:text-neutral-600 disabled:border disabled:border-neutral-800 rounded-none transition active:scale-95 cursor-pointer"
+                    id="premo-monitor-submit"
+                  >
+                    {premoLoading ? "MENGHUBUNGKAN..." : "SINKRONISASI"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

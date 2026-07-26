@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from "react";
-import { FileText, Plus, HelpCircle, Settings2, Sliders, Layers, Sparkles, Volume2 } from "lucide-react";
+import { FileText, Plus, HelpCircle, Settings2, Sliders, Layers, Sparkles, Volume2, ChevronDown, ChevronUp } from "lucide-react";
 import { PrompterMode, PunctuationDurations } from "../types";
 
 interface ScriptEditorProps {
@@ -47,6 +47,99 @@ const SCRIPT_PRESETS = [
   }
 ];
 
+interface SecureSliderProps {
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (value: number) => void;
+  label: string;
+  displayValue: string;
+}
+
+const SecureSlider: React.FC<SecureSliderProps> = ({
+  value,
+  min,
+  max,
+  step,
+  onChange,
+  label,
+  displayValue
+}) => {
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const percentage = Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100));
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    setIsDragging(true);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!isDragging || !containerRef.current) return;
+    e.stopPropagation();
+    e.preventDefault();
+
+    const rect = containerRef.current.getBoundingClientRect();
+    const clientX = e.clientX;
+    const relativeX = clientX - rect.left;
+    const fraction = Math.min(1, Math.max(0, relativeX / rect.width));
+    
+    let rawValue = min + fraction * (max - min);
+    const stepsCount = Math.round((rawValue - min) / step);
+    let steppedValue = min + stepsCount * step;
+    steppedValue = Math.min(max, Math.max(min, steppedValue));
+
+    onChange(steppedValue);
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    if (!isDragging) return;
+    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    setIsDragging(false);
+  };
+
+  return (
+    <div className="flex flex-col gap-1 py-1" id={`secure-slider-container-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}>
+      <div className="flex justify-between items-center text-[10px] text-neutral-400 select-none">
+        <span className="font-semibold text-neutral-300">{label}</span>
+        <span className="font-bold text-emerald-400">{displayValue}</span>
+      </div>
+      
+      <div 
+        ref={containerRef}
+        className="relative w-full h-4 flex items-center select-none"
+      >
+        {/* Track Bar (No pointer events to prevent accidental clicks!) */}
+        <div className="absolute w-full h-1 bg-neutral-900 rounded-lg pointer-events-none border border-neutral-800">
+          <div 
+            className="h-full bg-emerald-500 rounded-lg"
+            style={{ width: `${percentage}%` }}
+          />
+        </div>
+
+        {/* Head Handle (Thumb) - Interactive and secure */}
+        <div
+          className="absolute w-4 h-4 rounded-full bg-emerald-500 border-2 border-white shadow-[0_0_6px_rgba(16,185,129,0.4)] cursor-grab active:cursor-grabbing hover:scale-110 transition-transform duration-75 flex items-center justify-center z-10"
+          style={{ 
+            left: `calc(${percentage}% - 8px)`,
+            touchAction: "none"
+          }}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          id={`secure-slider-thumb-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+        >
+          <div className="w-1.5 h-1.5 rounded-full bg-white opacity-90" />
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default function ScriptEditor({
   text,
   onChangeText,
@@ -72,6 +165,7 @@ export default function ScriptEditor({
   onChangeDisableWordHighlight
 }: ScriptEditorProps) {
   const [showTagHelp, setShowTagHelp] = useState(false);
+  const [isPuncCollapse, setIsPuncCollapse] = useState(false);
 
   const injectTag = (tag: string) => {
     const textarea = document.getElementById("script-textarea") as HTMLTextAreaElement | null;
@@ -291,7 +385,20 @@ export default function ScriptEditor({
           <div className="flex flex-col gap-3 bg-neutral-950 p-3 rounded-none border border-neutral-800">
             <div className="flex items-center justify-between">
               <div className="flex flex-col">
-                <span className="text-xs font-semibold text-neutral-300">Pacing Tanda Baca Otomatis</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-semibold text-neutral-300">Pacing Tanda Baca Otomatis</span>
+                  {autoPacing && (
+                    <button
+                      type="button"
+                      onClick={() => setIsPuncCollapse(!isPuncCollapse)}
+                      className="text-neutral-400 hover:text-emerald-400 p-0.5 transition-colors rounded hover:bg-neutral-900"
+                      title={isPuncCollapse ? "Tampilkan Detail Jeda" : "Sembunyikan Detail Jeda"}
+                      id="toggle-punc-collapse-btn"
+                    >
+                      {isPuncCollapse ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+                    </button>
+                  )}
+                </div>
                 <span className="text-[10px] text-neutral-500 leading-tight">Jeda natural pada tanda baca</span>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
@@ -299,104 +406,74 @@ export default function ScriptEditor({
                   id="auto-pacing-toggle-checkbox"
                   type="checkbox"
                   checked={autoPacing}
-                  onChange={(e) => onChangeAutoPacing(e.target.checked)}
+                  onChange={(e) => {
+                    onChangeAutoPacing(e.target.checked);
+                    if (e.target.checked) {
+                      setIsPuncCollapse(false);
+                    }
+                  }}
                   className="sr-only peer"
                 />
                 <div className="w-9 h-5 bg-neutral-800 peer-focus:outline-none rounded-none peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-neutral-300 after:border-neutral-300 after:border after:rounded-none after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600 peer-checked:after:bg-white" />
               </label>
             </div>
 
-            {autoPacing && (
-              <div className="mt-1 pt-3 border-t border-neutral-900 flex flex-col gap-3 text-xs animate-slideDown" id="punc-custom-durations">
+            {autoPacing && !isPuncCollapse && (
+              <div className="mt-1 pt-3 border-t border-neutral-900 flex flex-col gap-4 text-xs animate-slideDown" id="punc-custom-durations">
                 {/* Comma slider */}
-                <div className="flex flex-col gap-1">
-                  <div className="flex justify-between items-center text-[10px] text-neutral-400">
-                    <span className="font-semibold text-neutral-300">Jeda Koma ( , - )</span>
-                    <span className="font-bold text-emerald-400">{(punctuationDurations.comma / 1000).toFixed(1)}s</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="3000"
-                    step="100"
-                    value={punctuationDurations.comma}
-                    onChange={(e) => onChangePunctuationDurations({ ...punctuationDurations, comma: parseInt(e.target.value) })}
-                    className="w-full h-1 accent-emerald-500 cursor-pointer bg-neutral-800 rounded-lg"
-                    id="slider-punc-comma"
-                  />
-                </div>
+                <SecureSlider
+                  label="Jeda Koma ( , - )"
+                  value={punctuationDurations.comma}
+                  min={0}
+                  max={3000}
+                  step={100}
+                  displayValue={`${(punctuationDurations.comma / 1000).toFixed(1)}s`}
+                  onChange={(val) => onChangePunctuationDurations({ ...punctuationDurations, comma: val })}
+                />
 
                 {/* Period slider */}
-                <div className="flex flex-col gap-1">
-                  <div className="flex justify-between items-center text-[10px] text-neutral-400">
-                    <span className="font-semibold text-neutral-300">Jeda Titik ( . 。 )</span>
-                    <span className="font-bold text-emerald-400">{(punctuationDurations.period / 1000).toFixed(1)}s</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="3000"
-                    step="100"
-                    value={punctuationDurations.period}
-                    onChange={(e) => onChangePunctuationDurations({ ...punctuationDurations, period: parseInt(e.target.value) })}
-                    className="w-full h-1 accent-emerald-500 cursor-pointer bg-neutral-800 rounded-lg"
-                    id="slider-punc-period"
-                  />
-                </div>
+                <SecureSlider
+                  label="Jeda Titik ( . 。 )"
+                  value={punctuationDurations.period}
+                  min={0}
+                  max={3000}
+                  step={100}
+                  displayValue={`${(punctuationDurations.period / 1000).toFixed(1)}s`}
+                  onChange={(val) => onChangePunctuationDurations({ ...punctuationDurations, period: val })}
+                />
 
                 {/* Question mark slider */}
-                <div className="flex flex-col gap-1">
-                  <div className="flex justify-between items-center text-[10px] text-neutral-400">
-                    <span className="font-semibold text-neutral-300">Jeda Tanya ( ? ？ )</span>
-                    <span className="font-bold text-emerald-400">{(punctuationDurations.question / 1000).toFixed(1)}s</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="3000"
-                    step="100"
-                    value={punctuationDurations.question}
-                    onChange={(e) => onChangePunctuationDurations({ ...punctuationDurations, question: parseInt(e.target.value) })}
-                    className="w-full h-1 accent-emerald-500 cursor-pointer bg-neutral-800 rounded-lg"
-                    id="slider-punc-question"
-                  />
-                </div>
+                <SecureSlider
+                  label="Jeda Tanya ( ? ？ )"
+                  value={punctuationDurations.question}
+                  min={0}
+                  max={3000}
+                  step={100}
+                  displayValue={`${(punctuationDurations.question / 1000).toFixed(1)}s`}
+                  onChange={(val) => onChangePunctuationDurations({ ...punctuationDurations, question: val })}
+                />
 
                 {/* Exclamation mark slider */}
-                <div className="flex flex-col gap-1">
-                  <div className="flex justify-between items-center text-[10px] text-neutral-400">
-                    <span className="font-semibold text-neutral-300">Jeda Seru ( ! ！ )</span>
-                    <span className="font-bold text-emerald-400">{(punctuationDurations.exclamation / 1000).toFixed(1)}s</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="3000"
-                    step="100"
-                    value={punctuationDurations.exclamation}
-                    onChange={(e) => onChangePunctuationDurations({ ...punctuationDurations, exclamation: parseInt(e.target.value) })}
-                    className="w-full h-1 accent-emerald-500 cursor-pointer bg-neutral-800 rounded-lg"
-                    id="slider-punc-exclamation"
-                  />
-                </div>
+                <SecureSlider
+                  label="Jeda Seru ( ! ！ )"
+                  value={punctuationDurations.exclamation}
+                  min={0}
+                  max={3000}
+                  step={100}
+                  displayValue={`${(punctuationDurations.exclamation / 1000).toFixed(1)}s`}
+                  onChange={(val) => onChangePunctuationDurations({ ...punctuationDurations, exclamation: val })}
+                />
 
                 {/* Colon/Semicolon slider */}
-                <div className="flex flex-col gap-1">
-                  <div className="flex justify-between items-center text-[10px] text-neutral-400">
-                    <span className="font-semibold text-neutral-300">Jeda Titik Dua & Koma ( : ; )</span>
-                    <span className="font-bold text-emerald-400">{(punctuationDurations.colonSemicolon / 1000).toFixed(1)}s</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="3000"
-                    step="100"
-                    value={punctuationDurations.colonSemicolon}
-                    onChange={(e) => onChangePunctuationDurations({ ...punctuationDurations, colonSemicolon: parseInt(e.target.value) })}
-                    className="w-full h-1 accent-emerald-500 cursor-pointer bg-neutral-800 rounded-lg"
-                    id="slider-punc-colon"
-                  />
-                </div>
+                <SecureSlider
+                  label="Jeda Titik Dua & Koma ( : ; )"
+                  value={punctuationDurations.colonSemicolon}
+                  min={0}
+                  max={3000}
+                  step={100}
+                  displayValue={`${(punctuationDurations.colonSemicolon / 1000).toFixed(1)}s`}
+                  onChange={(val) => onChangePunctuationDurations({ ...punctuationDurations, colonSemicolon: val })}
+                />
               </div>
             )}
           </div>

@@ -367,6 +367,7 @@ export default function App() {
             words={words}
             phrases={phrases}
             currentIndex={currentIndex}
+            elapsedTimeMs={elapsedTimeMs}
             isPlaying={isPlaying}
             isHolding={isHolding}
             visualConfig={visualConfig}

@@ -12,6 +12,7 @@ interface PrompterDisplayProps {
   words: PrompterWord[];
   phrases: PrompterPhrase[];
   currentIndex: number;
+  elapsedTimeMs: number;
   isPlaying: boolean;
   isHolding: boolean;
   visualConfig: VisualConfig;
@@ -31,6 +32,7 @@ export default function PrompterDisplay({
   words,
   phrases,
   currentIndex,
+  elapsedTimeMs,
   isPlaying,
   isHolding,
   visualConfig,
@@ -179,12 +181,31 @@ export default function PrompterDisplay({
     bottom: "justify-end pb-16"
   }[visualConfig.textPosition] || "justify-center";
 
+  // High-precision zero-latency pause progress calculation
+  const getPauseProgress = () => {
+    if (!isPlaying || !activeWord) return 0;
+    const localTimeMs = elapsedTimeMs - activeWord.startTimeMs;
+    const pauseStartMs = activeWord.durationMs;
+    const totalPauseMs = activeWord.punctuationPauseMs + activeWord.customPauseMs;
+    
+    if (totalPauseMs <= 0 || localTimeMs < pauseStartMs) {
+      return 0;
+    }
+    
+    const elapsedPauseMs = localTimeMs - pauseStartMs;
+    // Calculate remaining progress from 100% down to 0% (depleting)
+    const ratio = Math.min(1, Math.max(0, elapsedPauseMs / totalPauseMs));
+    return 1 - ratio;
+  };
+
+  const pauseProgress = getPauseProgress();
+
   return (
     <div className="w-full flex flex-col gap-3 select-none" id="prompter-display-main">
       {/* 1. Visual Presentation Area (Press & Hold and clicks interact here) */}
       <div
         id="prompter-gesture-canvas"
-        className={`w-full aspect-video md:aspect-[16/9] flex flex-col items-center rounded-none p-6 md:p-12 transition-all cursor-pointer relative overflow-hidden shadow-2xl ${textPositionClasses} ${getThemeClasses()} ${getFontFamilyClass()} ${
+        className={`w-full aspect-[16/7.5] md:aspect-[16/7.5] flex flex-col items-center rounded-none p-6 md:p-12 transition-all cursor-pointer relative overflow-hidden shadow-2xl ${textPositionClasses} ${getThemeClasses()} ${getFontFamilyClass()} ${
           isFocusMode ? "cursor-grab active:cursor-grabbing" : ""
         }`}
         onMouseDown={(e) => {
@@ -440,6 +461,21 @@ export default function PrompterDisplay({
             </div>
           )}
         </div>
+      </div>
+
+      {/* High-precision, zero-latency pause progress bar */}
+      <div 
+        className="w-full bg-neutral-950/90 h-1.5 relative overflow-hidden border border-neutral-900 rounded-none" 
+        id="prompter-pause-progress-bar-wrap"
+      >
+        <div
+          id="prompter-pause-progress-bar"
+          className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 opacity-90 shadow-[0_0_8px_rgba(16,185,129,0.5)]"
+          style={{ 
+            width: `${pauseProgress * 100}%`,
+            transition: "none" // Force instant frame paint for flawless zero latency and ultra-smooth animations
+          }}
+        />
       </div>
 
       {/* 2. Micro manual navigation control bar */}

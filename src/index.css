@@ -1,9 +1,10 @@
+@import url('https://cdn.jsdelivr.net/gh/shikhansoft/tiktok-sans-font@main/font.css');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Helvetica Neue", Helvetica, Arial, "Lucida Grande", sans-serif;
-  --font-serif: "Helvetica Neue", Helvetica, Arial, "Lucida Grande", sans-serif;
-  --font-mono: "Helvetica Neue", Helvetica, Arial, "Lucida Grande", sans-serif;
+  --font-sans: "TikTok Sans", "Helvetica Neue", Helvetica, Arial, "Lucida Grande", sans-serif;
+  --font-serif: "TikTok Sans", "Helvetica Neue", Helvetica, Arial, "Lucida Grande", sans-serif;
+  --font-mono: "TikTok Sans", "Helvetica Neue", Helvetica, Arial, "Lucida Grande", sans-serif;
 
   --radius-xs: 0px;
   --radius-sm: 0px;
@@ -16,7 +17,7 @@
 }
 
 html, body, #root {
-  font-family: "Helvetica Neue", Helvetica, Arial, "Lucida Grande", sans-serif !important;
+  font-family: "TikTok Sans", "Helvetica Neue", Helvetica, Arial, "Lucida Grande", sans-serif !important;
 }
 
 /* Force all elements to have no rounded corners */

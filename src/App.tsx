@@ -33,6 +33,10 @@ import { usePrompterEngine } from "./hooks/usePrompterEngine";
 import ScriptEditor from "./components/ScriptEditor";
 import PrompterDisplay from "./components/PrompterDisplay";
 
+// Firebase imports for PREMO realtime synchronization
+import { db } from "./lib/firebase";
+import { doc, setDoc, updateDoc, getDoc, onSnapshot, deleteDoc } from "firebase/firestore";
+
 // Default Indonesian script for first-time load
 const INITIAL_SCRIPT = "";
 
@@ -224,35 +228,33 @@ export default function App() {
     setGestureHolding
   } = usePrompterEngine(words);
 
-  // Wrapped PREMO actions that sync state
+  // Wrapped PREMO actions that sync state via Firestore
   const broadcastPremoState = async (action: string, extraFields: any = {}) => {
     if (!premoCode) return;
     try {
-      const payload = {
-        state: {
-          action,
-          lastActionTime: Date.now(),
-          isPlaying: extraFields.isPlaying !== undefined ? extraFields.isPlaying : isPlaying,
-          currentIndex: extraFields.currentIndex !== undefined ? extraFields.currentIndex : currentIndex,
-          elapsedTimeMs: extraFields.elapsedTimeMs !== undefined ? extraFields.elapsedTimeMs : elapsedTimeMs,
-          isHolding: extraFields.isHolding !== undefined ? extraFields.isHolding : isHolding,
-          scriptText,
-          wpm,
-          autoPacing,
-          mode,
-          maxWordsPerPhrase,
-          punctuationDurations,
-          visualConfig,
-          ...extraFields
-        }
+      const docRef = doc(db, "premoSessions", premoCode);
+      const statePayload = {
+        action,
+        lastActionTime: Date.now(),
+        isPlaying: extraFields.isPlaying !== undefined ? extraFields.isPlaying : isPlaying,
+        currentIndex: extraFields.currentIndex !== undefined ? extraFields.currentIndex : currentIndex,
+        elapsedTimeMs: extraFields.elapsedTimeMs !== undefined ? extraFields.elapsedTimeMs : elapsedTimeMs,
+        isHolding: extraFields.isHolding !== undefined ? extraFields.isHolding : isHolding,
+        scriptText,
+        wpm,
+        autoPacing,
+        mode,
+        maxWordsPerPhrase,
+        punctuationDurations,
+        visualConfig,
+        ...extraFields
       };
-      await fetch(`/api/premo/update/${premoCode}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
+      await updateDoc(docRef, {
+        state: statePayload,
+        lastUpdated: Date.now()
       });
     } catch (e) {
-      console.error("Gagal mengirim sinkronisasi PREMO", e);
+      console.error("Gagal mengirim sinkronisasi PREMO via Firestore", e);
     }
   };
 
@@ -335,9 +337,10 @@ export default function App() {
   const handlePremoDisconnect = async () => {
     if (premoCode) {
       try {
-        await fetch(`/api/premo/disconnect/${premoCode}`, { method: "POST" });
+        const docRef = doc(db, "premoSessions", premoCode);
+        await deleteDoc(docRef);
       } catch (e) {
-        console.error("Error sending disconnect request", e);
+        console.error("Error deleting session on disconnect", e);
       }
     }
     setPremoRole("none");
@@ -352,19 +355,36 @@ export default function App() {
     setPremoLoading(true);
     setPremoError("");
     try {
-      const response = await fetch("/api/premo/register", { method: "POST" });
-      const data = await response.json();
-      if (data.success) {
-        setPremoCode(data.code);
-        setPremoRole("controller");
-        setPremoPaired(false);
-        setPremoShowSetup(true);
-      } else {
-        setPremoError("Gagal mendaftarkan sesi. Silakan coba lagi.");
-      }
+      const code = Math.floor(1000 + Math.random() * 9000).toString();
+      const docRef = doc(db, "premoSessions", code);
+      const initialState = {
+        action: "init",
+        lastActionTime: Date.now(),
+        isPlaying,
+        currentIndex,
+        elapsedTimeMs,
+        isHolding,
+        scriptText,
+        wpm,
+        autoPacing,
+        mode,
+        maxWordsPerPhrase,
+        punctuationDurations,
+        visualConfig
+      };
+      await setDoc(docRef, {
+        code,
+        isPaired: false,
+        state: initialState,
+        lastUpdated: Date.now()
+      });
+      setPremoCode(code);
+      setPremoRole("controller");
+      setPremoPaired(false);
+      setPremoShowSetup(true);
     } catch (e) {
-      console.error("Error registering controller", e);
-      setPremoError("Koneksi gagal. Pastikan server aktif.");
+      console.error("Error registering controller via Firestore", e);
+      setPremoError("Koneksi Firebase gagal. Pastikan terhubung internet.");
     } finally {
       setPremoLoading(false);
     }
@@ -375,64 +395,70 @@ export default function App() {
     setPremoLoading(true);
     setPremoError("");
     try {
-      const response = await fetch("/api/premo/pair", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: premoMonitorInput })
-      });
-      const data = await response.json();
-      if (data.success) {
-        setPremoCode(premoMonitorInput);
-        setPremoPaired(true);
-        setPremoShowSetup(false);
-        setIsFocusMode(true);
-      } else {
-        setPremoError(data.error || "Gagal menghubungkan. Periksa kode pairing.");
+      const docRef = doc(db, "premoSessions", premoMonitorInput);
+      const docSnap = await getDoc(docRef);
+      if (!docSnap.exists()) {
+        setPremoError("Kode pairing tidak ditemukan. Silakan periksa kembali.");
+        setPremoLoading(false);
+        return;
       }
+      const data = docSnap.data();
+      if (data.isPaired) {
+        setPremoError("Sesi ini sudah terhubung dengan monitor lain.");
+        setPremoLoading(false);
+        return;
+      }
+      await updateDoc(docRef, {
+        isPaired: true,
+        lastUpdated: Date.now()
+      });
+      setPremoCode(premoMonitorInput);
+      setPremoPaired(true);
+      setPremoShowSetup(false);
+      setIsFocusMode(true);
     } catch (e) {
-      console.error("Error pairing monitor", e);
-      setPremoError("Gagal menghubungkan ke server. Pastikan kode benar.");
+      console.error("Error pairing monitor via Firestore", e);
+      setPremoError("Gagal terhubung ke database. Silakan coba lagi.");
     } finally {
       setPremoLoading(false);
     }
   };
 
-  // Controller pairing poll effect
+  // Controller pairing and status snapshot listener
   useEffect(() => {
-    if (premoRole !== "controller" || premoPaired || !premoCode) return;
-    let active = true;
-    const pollPairing = async () => {
-      try {
-        const response = await fetch(`/api/premo/poll/${premoCode}`);
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success && data.isPaired && active) {
-            setPremoPaired(true);
-            setPremoShowSetup(false);
-            // Broadcast initial configuration immediately
-            broadcastPremoState("init", {
-              scriptText,
-              wpm,
-              autoPacing,
-              mode,
-              maxWordsPerPhrase,
-              punctuationDurations,
-              visualConfig
-            });
-          }
+    if (premoRole !== "controller" || !premoCode) return;
+    
+    const docRef = doc(db, "premoSessions", premoCode);
+    const unsubscribe = onSnapshot(docRef, (snapshot) => {
+      if (!snapshot.exists()) {
+        if (premoPaired) {
+          handlePremoDisconnect();
         }
-      } catch (e) {
-        console.error("Error polling pairing status", e);
+        return;
       }
-    };
-    const interval = setInterval(pollPairing, 1000);
-    return () => {
-      active = false;
-      clearInterval(interval);
-    };
-  }, [premoRole, premoPaired, premoCode]);
+      const data = snapshot.data();
+      if (data.isPaired && !premoPaired) {
+        setPremoPaired(true);
+        setPremoShowSetup(false);
+        // Sync our latest config to make sure the monitor is up to date
+        broadcastPremoState("init", {
+          scriptText,
+          wpm,
+          autoPacing,
+          mode,
+          maxWordsPerPhrase,
+          punctuationDurations,
+          visualConfig
+        });
+      }
+    }, (error) => {
+      console.error("Error in controller snapshot listener:", error);
+    });
 
-  // Controller periodic heartbeat
+    return () => unsubscribe();
+  }, [premoRole, premoCode, premoPaired]);
+
+  // Controller periodic status sync when playing to prevent sync drift
   useEffect(() => {
     if (premoRole === "controller" && premoPaired && isPlaying) {
       const interval = setInterval(() => {
@@ -441,7 +467,7 @@ export default function App() {
           currentIndex,
           elapsedTimeMs
         });
-      }, 800);
+      }, 2500);
       return () => clearInterval(interval);
     }
   }, [premoRole, premoPaired, isPlaying, currentIndex, elapsedTimeMs]);
@@ -464,110 +490,83 @@ export default function App() {
     }
   }, [scriptText, wpm, autoPacing, mode, maxWordsPerPhrase, punctuationDurations, visualConfig, premoRole, premoPaired, premoCode]);
 
-  // Controller alive check
-  useEffect(() => {
-    if (premoRole !== "controller" || !premoPaired || !premoCode) return;
-    let active = true;
-    const checkSession = async () => {
-      try {
-        const response = await fetch(`/api/premo/poll/${premoCode}`);
-        if (!response.ok && response.status === 404 && active) {
-          handlePremoDisconnect();
-        }
-      } catch (e) {
-        console.error("Error checking session", e);
-      }
-    };
-    const interval = setInterval(checkSession, 3000);
-    return () => {
-      active = false;
-      clearInterval(interval);
-    };
-  }, [premoRole, premoPaired, premoCode]);
-
-  // Monitor polling and syncing
+  // Monitor realtime sync listener
   const lastActionTimeRef = useRef<number>(0);
   useEffect(() => {
     if (premoRole !== "monitor" || !premoPaired || !premoCode) return;
-    let active = true;
-    const poll = async () => {
-      try {
-        const response = await fetch(`/api/premo/poll/${premoCode}`);
-        if (!response.ok && response.status === 404 && active) {
-          handlePremoDisconnect();
-          return;
-        }
-        const data = await response.json();
-        if (data.success && active) {
-          if (!data.isPaired) {
-            handlePremoDisconnect();
-            return;
-          }
-          const remote = data.state;
-          if (remote) {
-            if (remote.scriptText !== undefined && remote.scriptText !== scriptText) {
-              setScriptText(remote.scriptText);
-            }
-            if (remote.wpm !== undefined && remote.wpm !== wpm) {
-              setWpm(remote.wpm);
-            }
-            if (remote.autoPacing !== undefined && remote.autoPacing !== autoPacing) {
-              setAutoPacing(remote.autoPacing);
-            }
-            if (remote.mode !== undefined && remote.mode !== mode) {
-              setMode(remote.mode);
-            }
-            if (remote.maxWordsPerPhrase !== undefined && remote.maxWordsPerPhrase !== maxWordsPerPhrase) {
-              setMaxWordsPerPhrase(remote.maxWordsPerPhrase);
-            }
-            if (remote.punctuationDurations !== undefined && JSON.stringify(remote.punctuationDurations) !== JSON.stringify(punctuationDurations)) {
-              setPunctuationDurations(remote.punctuationDurations);
-            }
-            if (remote.visualConfig !== undefined && JSON.stringify(remote.visualConfig) !== JSON.stringify(visualConfig)) {
-              setVisualConfig(remote.visualConfig);
-            }
 
-            if (remote.lastActionTime > lastActionTimeRef.current) {
-              lastActionTimeRef.current = remote.lastActionTime;
-              const action = remote.action;
-              if (action === "reset") {
-                reset();
-              } else if (action === "skipNext") {
-                skipNext();
-              } else if (action === "skipPrev") {
-                skipPrev();
-              } else if (action === "setIndex" && remote.currentIndex !== undefined) {
-                setIndex(remote.currentIndex);
-              } else if (action === "play") {
-                play();
-                if (remote.currentIndex !== undefined) setIndex(remote.currentIndex);
-              } else if (action === "pause") {
-                pause();
-                if (remote.currentIndex !== undefined) setIndex(remote.currentIndex);
-              }
+    const docRef = doc(db, "premoSessions", premoCode);
+    const unsubscribe = onSnapshot(docRef, (snapshot) => {
+      if (!snapshot.exists()) {
+        handlePremoDisconnect();
+        return;
+      }
+      const data = snapshot.data();
+      if (!data.isPaired) {
+        handlePremoDisconnect();
+        return;
+      }
+      const remote = data.state;
+      if (remote) {
+        if (remote.scriptText !== undefined && remote.scriptText !== scriptText) {
+          setScriptText(remote.scriptText);
+        }
+        if (remote.wpm !== undefined && remote.wpm !== wpm) {
+          setWpm(remote.wpm);
+        }
+        if (remote.autoPacing !== undefined && remote.autoPacing !== autoPacing) {
+          setAutoPacing(remote.autoPacing);
+        }
+        if (remote.mode !== undefined && remote.mode !== mode) {
+          setMode(remote.mode);
+        }
+        if (remote.maxWordsPerPhrase !== undefined && remote.maxWordsPerPhrase !== maxWordsPerPhrase) {
+          setMaxWordsPerPhrase(remote.maxWordsPerPhrase);
+        }
+        if (remote.punctuationDurations !== undefined && JSON.stringify(remote.punctuationDurations) !== JSON.stringify(punctuationDurations)) {
+          setPunctuationDurations(remote.punctuationDurations);
+        }
+        if (remote.visualConfig !== undefined && JSON.stringify(remote.visualConfig) !== JSON.stringify(visualConfig)) {
+          setVisualConfig(remote.visualConfig);
+        }
+
+        if (remote.lastActionTime > lastActionTimeRef.current) {
+          lastActionTimeRef.current = remote.lastActionTime;
+          const action = remote.action;
+          if (action === "reset") {
+            reset();
+          } else if (action === "skipNext") {
+            skipNext();
+          } else if (action === "skipPrev") {
+            skipPrev();
+          } else if (action === "setIndex" && remote.currentIndex !== undefined) {
+            setIndex(remote.currentIndex);
+          } else if (action === "play") {
+            play();
+            if (remote.currentIndex !== undefined) setIndex(remote.currentIndex);
+          } else if (action === "pause") {
+            pause();
+            if (remote.currentIndex !== undefined) setIndex(remote.currentIndex);
+          }
+        } else {
+          if (remote.isPlaying !== isPlaying) {
+            if (remote.isPlaying) {
+              play();
             } else {
-              if (remote.isPlaying !== isPlaying) {
-                if (remote.isPlaying) {
-                  play();
-                } else {
-                  pause();
-                }
-              }
-              if (remote.currentIndex !== undefined && remote.currentIndex !== currentIndex) {
-                setIndex(remote.currentIndex);
-              }
+              pause();
             }
           }
+          if (remote.currentIndex !== undefined && remote.currentIndex !== currentIndex) {
+            setIndex(remote.currentIndex);
+          }
         }
-      } catch (e) {
-        console.error("Gagal melakukan sinkronisasi PREMO", e);
       }
-    };
-    const interval = setInterval(poll, 200);
-    return () => {
-      active = false;
-      clearInterval(interval);
-    };
+    }, (error) => {
+      console.error("Error in monitor snapshot listener:", error);
+      handlePremoDisconnect();
+    });
+
+    return () => unsubscribe();
   }, [
     premoRole,
     premoPaired,

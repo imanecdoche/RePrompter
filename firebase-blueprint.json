@@ -1,0 +1,38 @@
+{
+  "entities": {
+    "PremoSession": {
+      "title": "Premo Session",
+      "description": "Pairing and real-time state synchronization session for PREMO",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "description": "4-digit pairing code"
+        },
+        "isPaired": {
+          "type": "boolean",
+          "description": "Whether the monitor has paired with this session"
+        },
+        "state": {
+          "type": "object",
+          "description": "The synchronized playback state and configurations"
+        },
+        "lastUpdated": {
+          "type": "number",
+          "description": "Timestamp of the last update in milliseconds"
+        }
+      },
+      "required": [
+        "code",
+        "isPaired",
+        "lastUpdated"
+      ]
+    }
+  },
+  "firestore": {
+    "premoSessions/{code}": {
+      "schema": "PremoSession",
+      "description": "Active pairing and synchronization sessions for PREMO"
+    }
+  }
+}

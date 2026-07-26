@@ -33,13 +33,37 @@ import PrompterDisplay from "./components/PrompterDisplay";
 // Default Indonesian script for first-time load
 const INITIAL_SCRIPT = "";
 
+const DEFAULT_STORAGE_KEY = "rhythmprompter_default_config";
+
+interface SavedConfig {
+  visualConfig: VisualConfig;
+  wpm: number;
+  autoPacing: boolean;
+  mode: PrompterMode;
+  maxWordsPerPhrase: number;
+}
+
+const getSavedConfig = (): SavedConfig | null => {
+  try {
+    const saved = localStorage.getItem(DEFAULT_STORAGE_KEY);
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch (e) {
+    console.error("Error reading default config", e);
+  }
+  return null;
+};
+
 export default function App() {
+  const savedConfig = useMemo(() => getSavedConfig(), []);
+
   // 1. Script & Pacing States
   const [scriptText, setScriptText] = useState<string>(INITIAL_SCRIPT);
-  const [wpm, setWpm] = useState<number>(130);
-  const [autoPacing, setAutoPacing] = useState<boolean>(true);
-  const [mode, setMode] = useState<PrompterMode>(PrompterMode.PHRASE);
-  const [maxWordsPerPhrase, setMaxWordsPerPhrase] = useState<number>(3);
+  const [wpm, setWpm] = useState<number>(savedConfig ? savedConfig.wpm : 130);
+  const [autoPacing, setAutoPacing] = useState<boolean>(savedConfig ? savedConfig.autoPacing : true);
+  const [mode, setMode] = useState<PrompterMode>(savedConfig ? savedConfig.mode : PrompterMode.PHRASE);
+  const [maxWordsPerPhrase, setMaxWordsPerPhrase] = useState<number>(savedConfig ? savedConfig.maxWordsPerPhrase : 3);
 
   // 2. Tab Navigation for the Config station
   const [activeTab, setActiveTab] = useState<"editor" | "styling" | "hotkeys">("editor");
@@ -110,7 +134,7 @@ export default function App() {
   }, [isFocusMode]);
 
   // 3. Visual Configurations
-  const [visualConfig, setVisualConfig] = useState<VisualConfig>({
+  const [visualConfig, setVisualConfig] = useState<VisualConfig>(savedConfig ? savedConfig.visualConfig : {
     fontSize: 34,
     theme: "dark-overlay",
     focalHighlight: "text-color",
@@ -120,6 +144,27 @@ export default function App() {
     textPosition: "center",
     tickerType: "focus"
   });
+
+  const [showSaveSuccess, setShowSaveSuccess] = useState<boolean>(false);
+
+  const saveAsDefault = () => {
+    const configToSave: SavedConfig = {
+      visualConfig,
+      wpm,
+      autoPacing,
+      mode,
+      maxWordsPerPhrase
+    };
+    try {
+      localStorage.setItem(DEFAULT_STORAGE_KEY, JSON.stringify(configToSave));
+      setShowSaveSuccess(true);
+      setTimeout(() => {
+        setShowSaveSuccess(false);
+      }, 2000);
+    } catch (e) {
+      console.error("Failed to save default config to localStorage", e);
+    }
+  };
 
   // 4. Parse script on input/config change
   const words = useMemo(() => {
@@ -198,9 +243,14 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#09090b] text-neutral-100 flex flex-col font-sans" id="rhythmprompter-app-root">
-      {/* FLOATING CONTROLS DI POJOK KANAN ATAS (ONLY IN FOCUS MODE) */}
+      {/* FLOATING CONTROLS (ONLY IN FOCUS MODE) - Moves to bottom if prompter is dragged/shifted upwards */}
       {isFocusMode && (
-        <div className="fixed top-4 right-4 z-50 flex items-center gap-2" id="focus-mode-floating-controls">
+        <div 
+          className={`fixed right-4 z-50 flex items-center gap-2 transition-all duration-300 ${
+            focusDragOffset < -50 ? "bottom-4 animate-slideUp" : "top-4"
+          }`} 
+          id="focus-mode-floating-controls"
+        >
           <button
             id="btn-toggle-fullscreen"
             onClick={toggleFullscreen}
@@ -662,6 +712,27 @@ export default function App() {
                 </div>
               </div>
             )}
+          </div>
+
+          {/* SET DEFAULT ACTION BANNER */}
+          <div className="bg-neutral-950/40 border border-neutral-800/60 p-4 rounded-none flex items-center justify-between gap-4" id="set-default-banner">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-xs font-bold text-neutral-300">Setelan Bawaan (Default)</span>
+              <span className="text-[10px] text-neutral-500 leading-normal">
+                Simpan tempo, pacing, mode, dan gaya saat ini sebagai bawaan aplikasi.
+              </span>
+            </div>
+            <button
+              onClick={saveAsDefault}
+              className={`px-4 py-2 font-bold text-xs uppercase tracking-wider transition-all duration-300 active:scale-95 whitespace-nowrap ${
+                showSaveSuccess
+                  ? "bg-emerald-500 text-neutral-950"
+                  : "bg-neutral-900 text-emerald-400 hover:text-emerald-300 border border-neutral-800 hover:border-neutral-700"
+              }`}
+              id="btn-set-default"
+            >
+              {showSaveSuccess ? "Tersimpan! ✓" : "Set Default"}
+            </button>
           </div>
         </section>
       )}

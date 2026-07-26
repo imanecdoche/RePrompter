@@ -15,6 +15,11 @@ export function usePrompterEngine(words: PrompterWord[]) {
   // Interactive gesture state: pressing on display to temporarily hold
   const [isGestureHolding, setIsGestureHolding] = useState<boolean>(false);
 
+  // High-precision clock references (Web Audio API)
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const audioStartCtxTimeRef = useRef<number>(0);
+  const audioStartElapsedMsRef = useRef<number>(0);
+
   // Use refs to avoid closures and lag in the requestAnimationFrame loop
   const isPlayingRef = useRef(isPlaying);
   const wordsRef = useRef(words);
@@ -58,7 +63,25 @@ export function usePrompterEngine(words: PrompterWord[]) {
     }
   }, []);
 
-  // Play Loop Execution using requestAnimationFrame
+  // Sync Web Audio references on playback start/change
+  const syncAudioClock = useCallback(() => {
+    if (!audioCtxRef.current) {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioContextClass) {
+        audioCtxRef.current = new AudioContextClass();
+      }
+    }
+    const ctx = audioCtxRef.current;
+    if (ctx) {
+      if (ctx.state === "suspended") {
+        ctx.resume();
+      }
+      audioStartCtxTimeRef.current = ctx.currentTime;
+      audioStartElapsedMsRef.current = elapsedTimeMsRef.current;
+    }
+  }, []);
+
+  // Play Loop Execution using requestAnimationFrame and high-precision AudioContext timeline
   useEffect(() => {
     const loop = (timestamp: number) => {
       if (!isPlayingRef.current) {
@@ -68,26 +91,38 @@ export function usePrompterEngine(words: PrompterWord[]) {
 
       if (lastTimeRef.current === null) {
         lastTimeRef.current = timestamp;
+        syncAudioClock();
       }
 
-      const delta = timestamp - lastTimeRef.current;
-      lastTimeRef.current = timestamp;
-
-      // If the user is currently holding down click/touch, pause the timer
+      // If user holds down click/touch, pause timer and continuously update start anchors
       if (isGestureHoldingRef.current) {
+        if (audioCtxRef.current) {
+          audioStartCtxTimeRef.current = audioCtxRef.current.currentTime;
+          audioStartElapsedMsRef.current = elapsedTimeMsRef.current;
+        }
+        lastTimeRef.current = timestamp;
         rafIdRef.current = requestAnimationFrame(loop);
         return;
       }
 
-      const nextElapsedTime = elapsedTimeMsRef.current + delta;
-      const currentWords = wordsRef.current;
+      // Calculate highly-stable elapsed time using Web Audio thread (or high-res fallback)
+      let nextElapsedTime = elapsedTimeMsRef.current;
+      const ctx = audioCtxRef.current;
+      if (ctx && ctx.state === "running") {
+        const audioDeltaSec = ctx.currentTime - audioStartCtxTimeRef.current;
+        nextElapsedTime = audioStartElapsedMsRef.current + audioDeltaSec * 1000;
+      } else {
+        const delta = Math.min(timestamp - lastTimeRef.current, 100); // safety cap to prevent glitches
+        nextElapsedTime = elapsedTimeMsRef.current + delta;
+      }
+      lastTimeRef.current = timestamp;
 
+      const currentWords = wordsRef.current;
       if (currentWords.length === 0) {
         setIsPlaying(false);
         return;
       }
 
-      // Check if we hit a hold tag or reached the very end
       const lastWord = currentWords[currentWords.length - 1];
       const totalScriptDuration = lastWord.startTimeMs + lastWord.totalDurationMs;
 
@@ -104,12 +139,10 @@ export function usePrompterEngine(words: PrompterWord[]) {
       let shouldHold = false;
       let holdTargetTime = 0;
 
-      // Find if we transitioned out of a word that had `isHold = true`
       for (let i = 0; i < currentWords.length; i++) {
         const w = currentWords[i];
         if (w.isHold) {
           const boundaryTime = w.startTimeMs + w.totalDurationMs;
-          // If we crossed this hold boundary in this tick
           if (elapsedTimeMsRef.current < boundaryTime && nextElapsedTime >= boundaryTime) {
             shouldHold = true;
             holdTargetTime = boundaryTime;
@@ -119,17 +152,16 @@ export function usePrompterEngine(words: PrompterWord[]) {
       }
 
       if (shouldHold) {
-        // Halt right at the boundary
         setElapsedTimeMs(holdTargetTime);
         elapsedTimeMsRef.current = holdTargetTime;
-        updateIndexFromTime(holdTargetTime - 1); // Select the hold word as active
+        updateIndexFromTime(holdTargetTime - 1);
         setIsPlaying(false);
         setIsHolding(true);
         lastTimeRef.current = null;
         return;
       }
 
-      // Normal progress
+      // Normal stable progress
       setElapsedTimeMs(nextElapsedTime);
       elapsedTimeMsRef.current = nextElapsedTime;
       updateIndexFromTime(nextElapsedTime);
@@ -151,13 +183,13 @@ export function usePrompterEngine(words: PrompterWord[]) {
         cancelAnimationFrame(rafIdRef.current);
       }
     };
-  }, [isPlaying, updateIndexFromTime]);
+  }, [isPlaying, updateIndexFromTime, syncAudioClock]);
 
   // Actions
   const play = useCallback(() => {
     if (wordsRef.current.length === 0) return;
     
-    // If we're at the very end, reset to beginning first
+    // If at the very end, reset to beginning first
     const lastWord = wordsRef.current[wordsRef.current.length - 1];
     const totalDuration = lastWord.startTimeMs + lastWord.totalDurationMs;
     if (elapsedTimeMsRef.current >= totalDuration) {
@@ -169,7 +201,12 @@ export function usePrompterEngine(words: PrompterWord[]) {
 
     setIsPlaying(true);
     setIsHolding(false);
-  }, []);
+
+    // Bootstrap Audio Context on user action
+    setTimeout(() => {
+      syncAudioClock();
+    }, 0);
+  }, [syncAudioClock]);
 
   const pause = useCallback(() => {
     setIsPlaying(false);
@@ -192,6 +229,11 @@ export function usePrompterEngine(words: PrompterWord[]) {
     setCurrentIndex(0);
     currentIndexRef.current = 0;
     lastTimeRef.current = null;
+    
+    if (audioCtxRef.current) {
+      audioStartCtxTimeRef.current = audioCtxRef.current.currentTime;
+      audioStartElapsedMsRef.current = 0;
+    }
   }, []);
 
   const setIndex = useCallback((index: number) => {
@@ -206,6 +248,11 @@ export function usePrompterEngine(words: PrompterWord[]) {
     setCurrentIndex(boundedIndex);
     currentIndexRef.current = boundedIndex;
     setIsHolding(false);
+
+    if (audioCtxRef.current) {
+      audioStartCtxTimeRef.current = audioCtxRef.current.currentTime;
+      audioStartElapsedMsRef.current = targetTime;
+    }
   }, []);
 
   const skipNext = useCallback(() => {
@@ -215,17 +262,15 @@ export function usePrompterEngine(words: PrompterWord[]) {
     // If currently blocked by a Hold tag, skip past it!
     if (isHolding) {
       setIsHolding(false);
-      // Advance to the next word immediately
       const nextIndex = currentIndexRef.current + 1;
       if (nextIndex < currentWords.length) {
         setIndex(nextIndex);
-        // Automatically play after skipping hold if it was playing previously
         setIsPlaying(true);
       } else {
-        // We reached the end
         const lastWord = currentWords[currentWords.length - 1];
-        setElapsedTimeMs(lastWord.startTimeMs + lastWord.totalDurationMs);
-        elapsedTimeMsRef.current = lastWord.startTimeMs + lastWord.totalDurationMs;
+        const endPos = lastWord.startTimeMs + lastWord.totalDurationMs;
+        setElapsedTimeMs(endPos);
+        elapsedTimeMsRef.current = endPos;
       }
       return;
     }

@@ -236,6 +236,28 @@ export function usePrompterEngine(words: PrompterWord[]) {
     }
   }, []);
 
+  const setExactTime = useCallback((timeMs: number, startPlaying?: boolean) => {
+    const currentWords = wordsRef.current;
+    if (currentWords.length === 0) return;
+
+    const boundedTime = Math.max(0, timeMs);
+    setElapsedTimeMs(boundedTime);
+    elapsedTimeMsRef.current = boundedTime;
+
+    updateIndexFromTime(boundedTime);
+    setIsHolding(false);
+
+    if (audioCtxRef.current) {
+      audioStartCtxTimeRef.current = audioCtxRef.current.currentTime;
+      audioStartElapsedMsRef.current = boundedTime;
+    }
+
+    if (startPlaying !== undefined) {
+      setIsPlaying(startPlaying);
+      isPlayingRef.current = startPlaying;
+    }
+  }, [updateIndexFromTime]);
+
   const setIndex = useCallback((index: number) => {
     const currentWords = wordsRef.current;
     if (currentWords.length === 0) return;
@@ -304,6 +326,7 @@ export function usePrompterEngine(words: PrompterWord[]) {
     togglePlay,
     reset,
     setIndex,
+    setExactTime,
     skipNext,
     skipPrev,
     setGestureHolding

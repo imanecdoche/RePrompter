@@ -223,6 +223,7 @@ export default function App() {
     togglePlay,
     reset,
     setIndex,
+    setExactTime,
     skipNext,
     skipPrev,
     setGestureHolding
@@ -458,6 +459,20 @@ export default function App() {
     return () => unsubscribe();
   }, [premoRole, premoCode, premoPaired]);
 
+  // Controller periodic status sync when playing to prevent timing drift
+  useEffect(() => {
+    if (premoRole === "controller" && premoPaired && isPlaying) {
+      const interval = setInterval(() => {
+        broadcastPremoState("sync", {
+          isPlaying: true,
+          currentIndex,
+          elapsedTimeMs
+        });
+      }, 2500);
+      return () => clearInterval(interval);
+    }
+  }, [premoRole, premoPaired, isPlaying, currentIndex, elapsedTimeMs]);
+
   // Controller config change sync
   useEffect(() => {
     if (premoRole === "controller" && premoPaired && premoCode) {
@@ -485,6 +500,7 @@ export default function App() {
     pause,
     reset,
     setIndex,
+    setExactTime,
     skipNext,
     skipPrev,
     handlePremoDisconnect
@@ -496,6 +512,7 @@ export default function App() {
       pause,
       reset,
       setIndex,
+      setExactTime,
       skipNext,
       skipPrev,
       handlePremoDisconnect
@@ -538,39 +555,33 @@ export default function App() {
         return prev;
       });
 
-      // 2. Process discrete remote play/pause/reset/navigation actions
+      // 2. Process remote actions with sub-second latency compensation
+      const now = Date.now();
+      const latencyMs = remote.lastActionTime ? Math.max(0, Math.min(now - remote.lastActionTime, 3000)) : 0;
+
       if (remote.lastActionTime && remote.lastActionTime > lastActionTimeRef.current) {
         lastActionTimeRef.current = remote.lastActionTime;
-        const { play, pause, reset, setIndex, skipNext, skipPrev } = prompterActionsRef.current;
+        const { reset, setExactTime } = prompterActionsRef.current;
         const action = remote.action;
 
         if (action === "play") {
-          if (remote.currentIndex !== undefined) {
-            setIndex(remote.currentIndex);
-          }
-          play();
+          const targetElapsed = (remote.elapsedTimeMs ?? 0) + latencyMs;
+          setExactTime(targetElapsed, true);
         } else if (action === "pause") {
-          pause();
-          if (remote.currentIndex !== undefined) {
-            setIndex(remote.currentIndex);
-          }
+          const targetElapsed = remote.elapsedTimeMs ?? 0;
+          setExactTime(targetElapsed, false);
         } else if (action === "reset") {
           reset();
-        } else if (action === "skipNext") {
-          skipNext();
-        } else if (action === "skipPrev") {
-          skipPrev();
-        } else if (action === "setIndex" && remote.currentIndex !== undefined) {
-          setIndex(remote.currentIndex);
-        } else if (action === "init") {
-          if (remote.currentIndex !== undefined) {
-            setIndex(remote.currentIndex);
-          }
-          if (remote.isPlaying) {
-            play();
-          } else {
-            pause();
-          }
+        } else if (action === "skipNext" || action === "skipPrev" || action === "setIndex" || action === "sync" || action === "init") {
+          const targetElapsed = (remote.elapsedTimeMs ?? 0) + (remote.isPlaying ? latencyMs : 0);
+          setExactTime(targetElapsed, remote.isPlaying);
+        }
+      } else if (remote.isPlaying) {
+        // Continuous latency drift correction during playback
+        const { setExactTime } = prompterActionsRef.current;
+        const expectedElapsed = (remote.elapsedTimeMs ?? 0) + latencyMs;
+        if (Math.abs(expectedElapsed - elapsedTimeMs) > 120) {
+          setExactTime(expectedElapsed, true);
         }
       }
     }, (error) => {
@@ -579,7 +590,7 @@ export default function App() {
     });
 
     return () => unsubscribe();
-  }, [premoRole, premoPaired, premoCode]);
+  }, [premoRole, premoPaired, premoCode, elapsedTimeMs]);
 
   // 6. Global keyboard listener (Bypassed when typing in inputs)
   useEffect(() => {

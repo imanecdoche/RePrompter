@@ -59,3 +59,9 @@ export interface PrompterState {
   elapsedTimeMs: number;      // current playtime in ms
   isHolding: boolean;         // waiting for manual trigger on a hold tag
 }
+
+export interface VideoConfig {
+  codec: "webm" | "mp4";
+  fps: 24 | 30 | 60;
+  ratio: "16:9" | "9:16" | "3:4" | "4:5" | "1:1";
+}

@@ -34,7 +34,7 @@ import {
   FlipHorizontal
 } from "lucide-react";
 
-import { PrompterMode, VisualConfig, PunctuationDurations } from "./types";
+import { PrompterMode, VisualConfig, PunctuationDurations, VideoConfig } from "./types";
 import { parseScript, groupWordsIntoPhrases, formatTime, DEFAULT_PUNCTUATION_DURATIONS } from "./lib/parser";
 import { usePrompterEngine } from "./hooks/usePrompterEngine";
 import ScriptEditor from "./components/ScriptEditor";
@@ -151,6 +151,12 @@ export default function App() {
   const [recordedVideoUrl, setRecordedVideoUrl] = useState<string | null>(null);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [showRestartDialog, setShowRestartDialog] = useState(false);
+  const [showVideoConfigModal, setShowVideoConfigModal] = useState(false);
+  const [videoConfig, setVideoConfig] = useState<VideoConfig>(() => {
+    const saved = localStorage.getItem("rhythm_video_config");
+    return saved ? JSON.parse(saved) : { codec: "webm", fps: 30, ratio: "16:9" };
+  });
+
   const discardRecordingRef = useRef<boolean>(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [resumeCountdown, setResumeCountdown] = useState<number | null>(null);
@@ -166,6 +172,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("rhythm_mirror", isMirrored.toString());
   }, [isMirrored]);
+
+  useEffect(() => {
+    localStorage.setItem("rhythm_video_config", JSON.stringify(videoConfig));
+  }, [videoConfig]);
 
   const toggleCameraMode = async () => {
     if (isCameraActive) {
@@ -184,7 +194,7 @@ export default function App() {
     } else {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { frameRate: 30, facingMode: "user" },
+          video: { frameRate: videoConfig.fps, facingMode: "user" },
           audio: {
             echoCancellation: false,
             noiseSuppression: false,
@@ -435,28 +445,53 @@ export default function App() {
     try {
       let streamToRecord: MediaStream = mediaStreamRef.current;
       
-      if (isMirrored && videoRef.current && canvasRef.current) {
+      const needsCanvas = isMirrored || videoConfig.ratio !== "16:9";
+      
+      if (needsCanvas && videoRef.current && canvasRef.current) {
         const video = videoRef.current;
         const canvas = canvasRef.current;
         const ctx = canvas.getContext("2d");
         
         if (ctx) {
-          canvas.width = video.videoWidth || 1280;
-          canvas.height = video.videoHeight || 720;
+          const vw = video.videoWidth || 1280;
+          const vh = video.videoHeight || 720;
+          
+          let targetRatio = 16 / 9;
+          if (videoConfig.ratio === "9:16") targetRatio = 9 / 16;
+          else if (videoConfig.ratio === "3:4") targetRatio = 3 / 4;
+          else if (videoConfig.ratio === "4:5") targetRatio = 4 / 5;
+          else if (videoConfig.ratio === "1:1") targetRatio = 1;
+          
+          let cw = vw;
+          let ch = vh;
+          
+          if (vw / vh > targetRatio) {
+            cw = vh * targetRatio;
+          } else {
+            ch = vw / targetRatio;
+          }
+          
+          canvas.width = cw;
+          canvas.height = ch;
+          
+          const srcX = (vw - cw) / 2;
+          const srcY = (vh - ch) / 2;
           
           const draw = () => {
             if (!video.paused && !video.ended) {
               ctx.save();
-              ctx.translate(canvas.width, 0);
-              ctx.scale(-1, 1);
-              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+              if (isMirrored) {
+                ctx.translate(canvas.width, 0);
+                ctx.scale(-1, 1);
+              }
+              ctx.drawImage(video, srcX, srcY, cw, ch, 0, 0, canvas.width, canvas.height);
               ctx.restore();
             }
             drawLoopRef.current = requestAnimationFrame(draw);
           };
           draw();
           
-          const canvasStream = canvas.captureStream(30);
+          const canvasStream = canvas.captureStream(videoConfig.fps);
           streamToRecord = new MediaStream([
             ...canvasStream.getVideoTracks(),
             ...mediaStreamRef.current.getAudioTracks()
@@ -464,7 +499,17 @@ export default function App() {
         }
       }
 
-      const options = { mimeType: "video/webm; codecs=vp8,opus" };
+      let options: MediaRecorderOptions = { mimeType: "video/webm; codecs=vp8,opus" };
+      if (videoConfig.codec === "mp4") {
+        if (MediaRecorder.isTypeSupported("video/mp4")) {
+          options = { mimeType: "video/mp4" };
+        } else if (MediaRecorder.isTypeSupported("video/mp4; codecs=avc1")) {
+          options = { mimeType: "video/mp4; codecs=avc1" };
+        } else {
+          console.warn("MP4 not supported by MediaRecorder, falling back to WebM");
+        }
+      }
+
       let recorder: MediaRecorder;
       if (MediaRecorder.isTypeSupported(options.mimeType)) {
         recorder = new MediaRecorder(streamToRecord, options);
@@ -982,6 +1027,15 @@ export default function App() {
             )}
           </button>
 
+          {/* [UI-NONPROGRAMMER] Tombol Konfigurasi Video */}
+          <button
+            onClick={() => setShowVideoConfigModal(true)}
+            className="w-10 h-10 flex items-center justify-center bg-neutral-900 hover:bg-neutral-800 text-neutral-200 hover:text-white rounded-none border border-neutral-700 transition active:scale-95"
+            title="Pengaturan Video"
+          >
+            <Video className="w-5 h-5 text-emerald-400" />
+          </button>
+
           {/* [UI-NONPROGRAMMER] Tombol aksi keluar mode fokus. Ubah warna hover pada 'hover:bg-neutral-800' jika perlu. */}
           <button
             id="btn-exit-focus"
@@ -1118,14 +1172,19 @@ export default function App() {
 
         {isCameraActive && isFocusMode && (
           <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none flex items-center justify-center">
-            <video 
-              ref={videoRef}
-              autoPlay 
-              muted 
-              playsInline 
-              className={`w-full h-full object-cover opacity-60 ${isMirrored ? "-scale-x-100" : ""}`}
-            />
-            <canvas ref={canvasRef} className="hidden" />
+            <div 
+              style={{ aspectRatio: videoConfig.ratio.replace(":", "/") }}
+              className="relative max-w-full max-h-full h-full overflow-hidden"
+            >
+              <video 
+                ref={videoRef}
+                autoPlay 
+                muted 
+                playsInline 
+                className={`w-full h-full object-cover opacity-60 ${isMirrored ? "-scale-x-100" : ""}`}
+              />
+              <canvas ref={canvasRef} className="hidden" />
+            </div>
           </div>
         )}
 
@@ -1761,6 +1820,73 @@ export default function App() {
                   className="px-4 py-2 text-sm font-bold bg-red-600 text-white border border-red-500 hover:bg-red-500 transition"
                 >
                   YA, ULANGI
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* VIDEO CONFIG MODAL */}
+      {showVideoConfigModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-neutral-900 border border-neutral-800 shadow-2xl max-w-md w-full animate-slideUp">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-bold text-neutral-100">Pengaturan Video</h2>
+                <button onClick={() => setShowVideoConfigModal(false)} className="text-neutral-400 hover:text-white">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <div className="flex flex-col gap-5">
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-bold text-neutral-400">Format (Codec)</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => setVideoConfig(p => ({ ...p, codec: "webm" }))}
+                      className={`px-3 py-2 text-sm font-bold border transition ${videoConfig.codec === "webm" ? "bg-emerald-600 text-white border-emerald-500" : "bg-neutral-800 text-neutral-300 border-neutral-700 hover:bg-neutral-700"}`}
+                    >.WEBM</button>
+                    <button
+                      onClick={() => setVideoConfig(p => ({ ...p, codec: "mp4" }))}
+                      className={`px-3 py-2 text-sm font-bold border transition ${videoConfig.codec === "mp4" ? "bg-emerald-600 text-white border-emerald-500" : "bg-neutral-800 text-neutral-300 border-neutral-700 hover:bg-neutral-700"}`}
+                    >.MP4</button>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-bold text-neutral-400">Frame Rate</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[24, 30, 60].map((fps) => (
+                      <button
+                        key={fps}
+                        onClick={() => setVideoConfig(p => ({ ...p, fps: fps as any }))}
+                        className={`px-3 py-2 text-sm font-bold border transition ${videoConfig.fps === fps ? "bg-emerald-600 text-white border-emerald-500" : "bg-neutral-800 text-neutral-300 border-neutral-700 hover:bg-neutral-700"}`}
+                      >{fps} FPS</button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-bold text-neutral-400">Rasio Aspek</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {["16:9", "9:16", "3:4", "4:5", "1:1"].map((ratio) => (
+                      <button
+                        key={ratio}
+                        onClick={() => setVideoConfig(p => ({ ...p, ratio: ratio as any }))}
+                        className={`px-3 py-2 text-sm font-bold border transition ${videoConfig.ratio === ratio ? "bg-emerald-600 text-white border-emerald-500" : "bg-neutral-800 text-neutral-300 border-neutral-700 hover:bg-neutral-700"}`}
+                      >{ratio}</button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-8 flex justify-end">
+                <button
+                  onClick={() => setShowVideoConfigModal(false)}
+                  className="px-6 py-2 text-sm font-bold bg-neutral-100 text-neutral-900 hover:bg-white transition"
+                >
+                  SELESAI
                 </button>
               </div>
             </div>

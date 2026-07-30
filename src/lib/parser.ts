@@ -91,14 +91,24 @@ export function parseScript(
         }
       }
 
-      const totalDuration = baseDurationMs + puncPauseMs + pendingPauseMs;
+      // Menghitung jeda ekstra untuk kata-kata yang panjang
+      // Rata-rata kata sekitar 5-6 karakter. Jika lebih dari 7, kita tambahkan jeda ekstra
+      let extraWordPauseMs = 0;
+      if (cleanText.length > 7) {
+        // Misal kata: "mempertanggungjawabkannya" (25 karakter)
+        // Ekstra karakter: 25 - 7 = 18. 
+        // Tambahan waktu: 18 * 40ms = 720ms ekstra
+        extraWordPauseMs = (cleanText.length - 7) * 40;
+      }
+
+      const totalDuration = baseDurationMs + puncPauseMs + extraWordPauseMs + pendingPauseMs;
 
       words.push({
         id: `word-${wordIndex}-${Math.random().toString(36).substring(2, 9)}`,
         text: wordText,
         cleanText,
         index: wordIndex,
-        durationMs: baseDurationMs,
+        durationMs: baseDurationMs + extraWordPauseMs, // Base word duration + long word penalty
         punctuationPauseMs: puncPauseMs,
         customPauseMs: pendingPauseMs,
         isHold: pendingHold,

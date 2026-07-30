@@ -32,6 +32,7 @@ import { parseScript, groupWordsIntoPhrases, formatTime, DEFAULT_PUNCTUATION_DUR
 import { usePrompterEngine } from "./hooks/usePrompterEngine";
 import ScriptEditor from "./components/ScriptEditor";
 import PrompterDisplay from "./components/PrompterDisplay";
+import { Footer } from "./components/Footer";
 
 // Firebase imports for PREMO realtime synchronization
 import { db } from "./lib/firebase";
@@ -668,10 +669,11 @@ export default function App() {
           }`} 
           id="focus-mode-floating-controls"
         >
+          {/* [UI-NONPROGRAMMER] Tombol aksi layar penuh. Ubah warna hover pada 'hover:bg-neutral-800' jika perlu. */}
           <button
             id="btn-toggle-fullscreen"
             onClick={toggleFullscreen}
-            className="w-10 h-10 flex items-center justify-center bg-neutral-900/95 hover:bg-neutral-800 text-neutral-200 hover:text-white rounded-none border border-neutral-700/60 shadow-2xl backdrop-blur transition active:scale-95"
+            className="w-10 h-10 flex items-center justify-center bg-neutral-900 hover:bg-neutral-800 text-neutral-200 hover:text-white rounded-none border border-neutral-700 transition active:scale-95"
             title={isFullscreen ? "Keluar Layar Penuh" : "Masuk Layar Penuh"}
           >
             {isFullscreen ? (
@@ -681,10 +683,11 @@ export default function App() {
             )}
           </button>
 
+          {/* [UI-NONPROGRAMMER] Tombol aksi keluar mode fokus. Ubah warna hover pada 'hover:bg-neutral-800' jika perlu. */}
           <button
             id="btn-exit-focus"
             onClick={() => setIsFocusMode(false)}
-            className="w-10 h-10 flex items-center justify-center bg-neutral-900/95 hover:bg-neutral-800 text-neutral-200 hover:text-white rounded-none border border-neutral-700/60 shadow-2xl backdrop-blur transition active:scale-95"
+            className="w-10 h-10 flex items-center justify-center bg-neutral-900 hover:bg-neutral-800 text-neutral-200 hover:text-white rounded-none border border-neutral-700 transition active:scale-95"
             title="Buka Konfigurasi (Keluar Focus Mode)"
           >
             <Settings className="w-5 h-5 text-emerald-400 animate-spin" style={{ animationDuration: "12s" }} />
@@ -1272,15 +1275,12 @@ export default function App() {
       </main>
 
       {/* FOOTER */}
-      {!isFocusMode && (
-        <footer className="border-t border-neutral-900 bg-[#070708] py-4 px-6 text-center text-[11px] text-neutral-600 mt-auto" id="app-footer">
-          &copy; 2026 RhythmPrompter. Dibuat dengan presisi untuk konten creator modern. All rights reserved.
-        </footer>
-      )}
+      <Footer isFocusMode={isFocusMode} />
 
       {/* PREMO SETUP MODAL */}
       {premoShowSetup && (
-        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn" id="premo-setup-overlay">
+        <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 animate-fadeIn" id="premo-setup-overlay">
+          {/* [UI-NONPROGRAMMER] Overlay setup dialog. Di atas adalah wrapper latar belakang modal. */}
           <div className="w-full max-w-md bg-neutral-950 border border-neutral-800 p-6 shadow-2xl relative" id="premo-setup-modal">
             {/* Header */}
             <div className="flex items-center justify-between border-b border-neutral-800 pb-4 mb-5" id="premo-modal-header">

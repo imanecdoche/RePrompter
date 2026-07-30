@@ -468,9 +468,10 @@ export default function PrompterDisplay({
         className="w-full bg-neutral-950/90 h-1.5 relative overflow-hidden border border-neutral-900 rounded-none" 
         id="prompter-pause-progress-bar-wrap"
       >
+        {/* [UI-NONPROGRAMMER] Warna progress bar. Ubah "bg-emerald-500" menjadi warna lain (misal: bg-blue-500) jika ingin mengganti warna bar jeda. */}
         <div
           id="prompter-pause-progress-bar"
-          className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 opacity-90 shadow-[0_0_8px_rgba(16,185,129,0.5)]"
+          className="h-full bg-emerald-500"
           style={{ 
             width: `${pauseProgress * 100}%`,
             transition: "none" // Force instant frame paint for flawless zero latency and ultra-smooth animations

@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import jsQR from 'jsqr';
-import { Camera, XCircle } from 'lucide-react';
+import { 
+  LuCamera as Camera, 
+  LuCircleX as XCircle 
+} from 'react-icons/lu';
 
 interface QRScannerProps {
   onScan: (data: string) => void;

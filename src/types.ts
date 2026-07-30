@@ -3,6 +3,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { IconBaseProps } from 'react-icons';
+
+declare module 'react-icons' {
+  export interface IconBaseProps {
+    className?: string;
+  }
+}
+
+declare module 'react-icons/lib' {
+  export interface IconBaseProps {
+    className?: string;
+  }
+}
+
 export enum PrompterMode {
   WORD = "WORD",     // RSVP (one word centered)
   PHRASE = "PHRASE", // Phrase-by-phrase (group of words)
@@ -51,6 +65,7 @@ export interface VisualConfig {
   phraseHighlightType?: "word" | "phrase"; // "word" = highlight word, "phrase" = highlight full phrase
   disableWordHighlight?: boolean;          // true to disable word-by-word highlights
   showNextPreview?: boolean;               // true to show the next word/phrase below main with 50% opacity
+  voiceTrackingEnabled: boolean;           // true if voice tracking mode is active
 }
 
 export interface PrompterState {

@@ -4,7 +4,19 @@
  */
 
 import React, { useState, useRef } from "react";
-import { FileText, Plus, HelpCircle, Settings2, Sliders, Layers, Sparkles, Volume2, ChevronDown, ChevronUp } from "lucide-react";
+import { 
+  LuFileText as FileText, 
+  LuPlus as Plus, 
+  LuCircleHelp as HelpCircle, 
+  LuSettings2 as Settings2, 
+  LuSlidersHorizontal as Sliders, 
+  LuLayers as Layers, 
+  LuSparkles as Sparkles, 
+  LuVolume2 as Volume2, 
+  LuChevronDown as ChevronDown, 
+  LuChevronUp as ChevronUp,
+  LuMic as Mic
+} from "react-icons/lu";
 import { PrompterMode, PunctuationDurations } from "../types";
 
 interface ScriptEditorProps {
@@ -30,6 +42,8 @@ interface ScriptEditorProps {
   onChangePhraseHighlightType?: (type: "word" | "phrase") => void;
   disableWordHighlight?: boolean;
   onChangeDisableWordHighlight?: (disable: boolean) => void;
+  voiceTrackingEnabled?: boolean;
+  onChangeVoiceTracking?: (enabled: boolean) => void;
 }
 
 const SCRIPT_PRESETS = [
@@ -162,7 +176,9 @@ export default function ScriptEditor({
   phraseHighlightType,
   onChangePhraseHighlightType,
   disableWordHighlight,
-  onChangeDisableWordHighlight
+  onChangeDisableWordHighlight,
+  voiceTrackingEnabled,
+  onChangeVoiceTracking
 }: ScriptEditorProps) {
   const [showTagHelp, setShowTagHelp] = useState(false);
   const [isPuncCollapse, setIsPuncCollapse] = useState(false);
@@ -431,6 +447,31 @@ export default function ScriptEditor({
               <span>Cepat</span>
             </div>
           </div>
+
+          {/* Voice Tracking Toggle */}
+          {onChangeVoiceTracking && (
+            <div className="flex flex-col gap-3 bg-neutral-950 p-3 rounded-none border border-neutral-800" id="voice-tracking-setting">
+              <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-1 pr-4">
+                  <div className="flex items-center gap-2">
+                    <Mic className="w-4 h-4 text-emerald-400" />
+                    <span className="text-sm font-semibold text-neutral-200">Voice-Tracking Prompter</span>
+                  </div>
+                  <span className="text-[10px] text-neutral-500 leading-tight">Mendengarkan suara Anda dan menggulir otomatis (Beta, Butuh izin Mic)</span>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    id="voice-tracking-checkbox"
+                    type="checkbox"
+                    checked={!!voiceTrackingEnabled}
+                    onChange={(e) => onChangeVoiceTracking(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-neutral-800 peer-focus:outline-none rounded-none peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-neutral-300 after:border-neutral-300 after:border after:rounded-none after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600 peer-checked:after:bg-white" />
+                </label>
+              </div>
+            </div>
+          )}
 
           {/* Autopacing trigger */}
           <div className="flex flex-col gap-3 bg-neutral-950 p-3 rounded-none border border-neutral-800">

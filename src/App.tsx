@@ -5,43 +5,46 @@
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
-  Play,
-  Pause,
-  RotateCcw,
-  ChevronLeft,
-  ChevronRight,
-  Settings,
-  Sliders,
-  Keyboard,
-  Info,
-  Type,
-  Eye,
-  Sparkles,
-  Zap,
-  HelpCircle,
-  Clock,
-  Maximize,
-  Minimize,
-  Tv,
-  Smartphone,
-  Gamepad2,
-  Video,
-  VideoOff,
-  Circle,
-  Square,
-  Download,
-  X,
-  FlipHorizontal,
-  Cast,
-  Heart,
-  Coffee,
-  Camera
-} from "lucide-react";
+  LuPlay as Play,
+  LuPause as Pause,
+  LuRotateCcw as RotateCcw,
+  LuChevronLeft as ChevronLeft,
+  LuChevronRight as ChevronRight,
+  LuSettings as Settings,
+  LuSlidersHorizontal as Sliders,
+  LuKeyboard as Keyboard,
+  LuInfo as Info,
+  LuType as Type,
+  LuEye as Eye,
+  LuSparkles as Sparkles,
+  LuZap as Zap,
+  LuCircleHelp as HelpCircle,
+  LuClock as Clock,
+  LuMaximize as Maximize,
+  LuMinimize as Minimize,
+  LuTv as Tv,
+  LuSmartphone as Smartphone,
+  LuGamepad2 as Gamepad2,
+  LuVideo as Video,
+  LuVideoOff as VideoOff,
+  LuCircle as Circle,
+  LuSquare as Square,
+  LuDownload as Download,
+  LuX as X,
+  LuFlipHorizontal as FlipHorizontal,
+  LuCast as Cast,
+  LuHeart as Heart,
+  LuCoffee as Coffee,
+  LuCamera as Camera,
+  LuMic as Mic
+} from "react-icons/lu";
 import qrCodeImg from '../assets/qrcode.jfif';
 
 import { PrompterMode, VisualConfig, PunctuationDurations, VideoConfig } from "./types";
 import { parseScript, groupWordsIntoPhrases, formatTime, DEFAULT_PUNCTUATION_DURATIONS } from "./lib/parser";
 import { usePrompterEngine } from "./hooks/usePrompterEngine";
+import { useVoiceTracking } from "./hooks/useVoiceTracking";
+import { matchVoiceToPrompter } from "./lib/voiceMatcher";
 import ScriptEditor from "./components/ScriptEditor";
 import PrompterDisplay from "./components/PrompterDisplay";
 import { Footer } from "./components/Footer";
@@ -275,7 +278,8 @@ export default function App() {
     tickerType: "focus",
     phraseHighlightType: "word",
     disableWordHighlight: false,
-    showNextPreview: false
+    showNextPreview: false,
+    voiceTrackingEnabled: false
   });
 
   const [showSaveSuccess, setShowSaveSuccess] = useState<boolean>(false);
@@ -355,6 +359,24 @@ export default function App() {
     setGestureHolding
   } = usePrompterEngine(words);
 
+  // Voice Tracking integration
+  const { isListening, transcript, startListening, stopListening } = useVoiceTracking();
+
+  useEffect(() => {
+    if (!visualConfig.voiceTrackingEnabled || !isListening || !transcript) return;
+    
+    // Cari kecocokan kata antara ucapan pengguna dan naskah
+    const matchedIndex = matchVoiceToPrompter(transcript, words, currentIndex, 15);
+    
+    if (matchedIndex !== null && matchedIndex > currentIndex) {
+      const targetWord = words[matchedIndex];
+      if (targetWord) {
+        // Langsung lompat ke kata tersebut (false berarti engine tidak jalan otomatis)
+        setExactTime(targetWord.startTimeMs, false);
+      }
+    }
+  }, [transcript, isListening, visualConfig.voiceTrackingEnabled, words, currentIndex, setExactTime]);
+
   // Wrapped PREMO actions that sync state via Firestore
   const broadcastPremoState = async (action: string, extraFields: any = {}) => {
     if (!premoCode) return;
@@ -386,13 +408,21 @@ export default function App() {
   };
 
   const handleTogglePlay = () => {
-    togglePlay();
-    if (premoRole === "controller" && premoPaired) {
-      broadcastPremoState(isPlaying ? "pause" : "play", {
-        isPlaying: !isPlaying,
-        currentIndex,
-        elapsedTimeMs
-      });
+    if (visualConfig.voiceTrackingEnabled) {
+      if (isListening) {
+        stopListening();
+      } else {
+        startListening();
+      }
+    } else {
+      togglePlay();
+      if (premoRole === "controller" && premoPaired) {
+        broadcastPremoState(isPlaying ? "pause" : "play", {
+          isPlaying: !isPlaying,
+          currentIndex,
+          elapsedTimeMs
+        });
+      }
     }
   };
 
@@ -843,7 +873,7 @@ export default function App() {
   const lastActionTimeRef = useRef<number>(0);
 
   // Store actions in ref to prevent snapshot listener resubscription during playback
-  const prompterActionsRef = useRef({
+  const prompterActionsRef = useRef<any>({
     play,
     pause,
     reset,
@@ -1406,12 +1436,20 @@ export default function App() {
                 <button
                   id="btn-nav-play-toggle"
                   onClick={handleTogglePlay}
-                  className={`px-8 py-2.5 h-12 font-bold text-xs rounded-none transition active:scale-95 flex items-center gap-2.5 shadow-xl uppercase tracking-wider ${isPlaying
-                    ? "bg-amber-600 text-white hover:bg-amber-500 shadow-amber-950/25 border border-amber-500"
-                    : "bg-emerald-500 text-neutral-950 hover:bg-emerald-400 shadow-emerald-950/25 border border-emerald-400"
-                    }`}
+                  className={`px-8 py-2.5 h-12 font-bold text-xs rounded-none transition active:scale-95 flex items-center gap-2.5 shadow-xl uppercase tracking-wider ${
+                    isListening
+                      ? "bg-red-600 text-white hover:bg-red-500 shadow-red-950/25 border border-red-500 animate-pulse"
+                      : isPlaying
+                      ? "bg-amber-600 text-white hover:bg-amber-500 shadow-amber-950/25 border border-amber-500"
+                      : "bg-emerald-500 text-neutral-950 hover:bg-emerald-400 shadow-emerald-950/25 border border-emerald-400"
+                  }`}
                 >
-                  {isPlaying ? (
+                  {isListening ? (
+                    <>
+                      <Mic className="w-4 h-4 fill-current" />
+                      <span>MENDENGARKAN...</span>
+                    </>
+                  ) : isPlaying ? (
                     <>
                       <Pause className="w-4 h-4 fill-current" />
                       <span>PAUSE</span>
@@ -1513,6 +1551,8 @@ export default function App() {
                   onChangeTickerType={(type) =>
                     setVisualConfig((prev) => ({ ...prev, tickerType: type }))
                   }
+                  voiceTrackingEnabled={visualConfig.voiceTrackingEnabled}
+                  onChangeVoiceTracking={(enabled) => setVisualConfig((prev) => ({ ...prev, voiceTrackingEnabled: enabled }))}
                   phraseHighlightType={visualConfig.phraseHighlightType || "word"}
                   onChangePhraseHighlightType={(type) =>
                     setVisualConfig((prev) => ({ ...prev, phraseHighlightType: type }))
@@ -1704,6 +1744,7 @@ export default function App() {
                         <div className="w-9 h-5 bg-neutral-800 peer-focus:outline-none rounded-none peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-neutral-300 after:border-neutral-300 after:border after:rounded-none after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600 peer-checked:after:bg-white" />
                       </label>
                     </div>
+
                   </div>
                 </div>
               )}

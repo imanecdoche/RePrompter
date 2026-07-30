@@ -4,7 +4,16 @@
  */
 
 import React, { useEffect, useRef } from "react";
-import { ChevronLeft, ChevronRight, Play, Pause, Hand, CornerDownLeft, Sparkles } from "lucide-react";
+import { 
+  LuChevronLeft as ChevronLeft, 
+  LuChevronRight as ChevronRight, 
+  LuPlay as Play, 
+  LuPause as Pause, 
+  LuHand as Hand, 
+  LuCornerDownLeft as CornerDownLeft, 
+  LuSparkles as Sparkles,
+  LuMic as Mic
+} from "react-icons/lu";
 import { PrompterMode, PrompterWord, PrompterPhrase, VisualConfig } from "../types";
 
 interface PrompterDisplayProps {
@@ -14,6 +23,7 @@ interface PrompterDisplayProps {
   currentIndex: number;
   elapsedTimeMs: number;
   isPlaying: boolean;
+  isListening?: boolean;
   isHolding: boolean;
   visualConfig: VisualConfig;
   onTriggerNext: () => void;
@@ -35,6 +45,7 @@ export default function PrompterDisplay({
   currentIndex,
   elapsedTimeMs,
   isPlaying,
+  isListening,
   isHolding,
   visualConfig,
   onTriggerNext,
@@ -522,12 +533,20 @@ export default function PrompterDisplay({
           <button
             id="btn-prompter-play-toggle"
             onClick={onTogglePlay}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-none transition active:scale-95 ${isPlaying
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-none transition active:scale-95 ${
+              isListening
+                ? "bg-red-600 border border-red-500/30 text-white animate-pulse"
+                : isPlaying
                 ? "bg-amber-600/20 border border-amber-500/30 text-amber-300"
                 : "bg-emerald-600 text-neutral-950 hover:bg-emerald-500"
-              }`}
+            }`}
           >
-            {isPlaying ? (
+            {isListening ? (
+              <>
+                <Mic className="w-3.5 h-3.5 fill-current" />
+                <span>Mendengarkan</span>
+              </>
+            ) : isPlaying ? (
               <>
                 <Pause className="w-3.5 h-3.5 fill-current" />
                 <span>Pause</span>

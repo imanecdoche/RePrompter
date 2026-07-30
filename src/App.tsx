@@ -150,6 +150,8 @@ export default function App() {
   const [isRecording, setIsRecording] = useState(false);
   const [recordedVideoUrl, setRecordedVideoUrl] = useState<string | null>(null);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [showRestartDialog, setShowRestartDialog] = useState(false);
+  const discardRecordingRef = useRef<boolean>(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [resumeCountdown, setResumeCountdown] = useState<number | null>(null);
   const [isMirrored, setIsMirrored] = useState<boolean>(() => localStorage.getItem("rhythm_mirror") !== "false");
@@ -413,6 +415,19 @@ export default function App() {
     }
   };
 
+  // RESTART LOGIC
+  const handleRestartTake = () => {
+    setShowRestartDialog(false);
+    if (isRecording) {
+      discardRecordingRef.current = true;
+      stopRecording();
+    }
+    handleReset();
+    if (isCameraActive) {
+      setCountdown(3);
+    }
+  };
+
   // RECORDING LOGIC
   const startRecording = () => {
     if (!mediaStreamRef.current) return;
@@ -464,6 +479,14 @@ export default function App() {
       };
 
       recorder.onstop = () => {
+        if (drawLoopRef.current) {
+          cancelAnimationFrame(drawLoopRef.current);
+          drawLoopRef.current = null;
+        }
+        if (discardRecordingRef.current) {
+          discardRecordingRef.current = false;
+          return;
+        }
         const blob = new Blob(recordedChunksRef.current, { type: "video/webm" });
         const url = URL.createObjectURL(blob);
         setRecordedVideoUrl(url);
@@ -882,6 +905,16 @@ export default function App() {
             }`}
           id="focus-mode-floating-controls"
         >
+          {isCameraActive && (
+            <button
+              onClick={() => setShowRestartDialog(true)}
+              className="w-10 h-10 flex items-center justify-center rounded-none border transition active:scale-95 shadow-lg bg-neutral-800 text-neutral-300 border-neutral-700 hover:bg-neutral-700"
+              title="Ulangi dari Awal"
+            >
+              <RotateCcw className="w-4 h-4 transition-transform duration-300" />
+            </button>
+          )}
+
           {isCameraActive && !isRecording && (
             <button
               onClick={() => setIsMirrored(prev => !prev)}
@@ -1708,6 +1741,33 @@ export default function App() {
       )}
 
       {/* VIDEO PREVIEW MODAL */}
+      {showRestartDialog && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-neutral-900 border border-neutral-800 shadow-2xl max-w-sm w-full animate-slideUp">
+            <div className="p-6">
+              <h2 className="text-xl font-bold text-neutral-100 mb-2">Ulangi Rekaman?</h2>
+              <p className="text-sm text-neutral-400 mb-6">
+                Apakah Anda yakin ingin mengulang dari awal? Jika Anda sedang merekam, rekaman saat ini akan dihapus secara permanen.
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setShowRestartDialog(false)}
+                  className="px-4 py-2 text-sm font-bold bg-neutral-800 text-neutral-300 border border-neutral-700 hover:bg-neutral-700 transition"
+                >
+                  BATAL
+                </button>
+                <button
+                  onClick={handleRestartTake}
+                  className="px-4 py-2 text-sm font-bold bg-red-600 text-white border border-red-500 hover:bg-red-500 transition"
+                >
+                  YA, ULANGI
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showPreviewModal && recordedVideoUrl && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4">
           <div className="bg-neutral-950 border border-neutral-800 p-4 md:p-6 rounded-none w-full max-w-3xl flex flex-col gap-4 shadow-2xl">

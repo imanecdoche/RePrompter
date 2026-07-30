@@ -150,6 +150,7 @@ export default function App() {
   const [recordedVideoUrl, setRecordedVideoUrl] = useState<string | null>(null);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
+  const [resumeCountdown, setResumeCountdown] = useState<number | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -170,12 +171,13 @@ export default function App() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { frameRate: 30, facingMode: "user" },
-          audio: true
+          audio: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false
+          }
         });
         mediaStreamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
         setIsCameraActive(true);
       } catch (err) {
         console.error("Camera access error:", err);
@@ -183,6 +185,13 @@ export default function App() {
       }
     }
   };
+
+  // Pastikan srcObject diisi setelah elemen <video> di-render oleh React
+  useEffect(() => {
+    if (isCameraActive && videoRef.current && mediaStreamRef.current) {
+      videoRef.current.srcObject = mediaStreamRef.current;
+    }
+  }, [isCameraActive]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -468,15 +477,27 @@ export default function App() {
     }
   }, [countdown]);
 
+  // Countdown Timer untuk LANJUTKAN (Resume dari Hold)
+  useEffect(() => {
+    if (resumeCountdown === null) return;
+    if (resumeCountdown > 0) {
+      const timer = setTimeout(() => setResumeCountdown(resumeCountdown - 1), 1000);
+      return () => clearTimeout(timer);
+    } else {
+      setResumeCountdown(null);
+      handleSkipNext();
+    }
+  }, [resumeCountdown]);
+
   // Auto Stop Recording saat naskah selesai (jeda 3 detik)
   useEffect(() => {
-    if (isRecording && !isPlaying && words.length > 0 && currentIndex >= words.length - 1) {
+    if (isRecording && !isPlaying && !isHolding && words.length > 0 && currentIndex >= words.length - 1) {
       const timer = setTimeout(() => {
         stopRecording();
       }, 3000);
       return () => clearTimeout(timer);
     }
-  }, [isPlaying, currentIndex, isRecording, words.length]);
+  }, [isPlaying, currentIndex, isRecording, words.length, isHolding]);
 
   const handlePremoDisconnect = async () => {
     if (premoCode) {
@@ -810,6 +831,17 @@ export default function App() {
             }`}
           id="focus-mode-floating-controls"
         >
+          {isCameraActive && isHolding && (
+            <button
+              id="btn-resume-hold"
+              onClick={() => setResumeCountdown(3)}
+              className="w-auto px-4 h-10 flex items-center justify-center font-bold text-xs uppercase tracking-wider rounded-none border transition active:scale-95 shadow-lg bg-amber-500 text-neutral-950 border-amber-400 hover:bg-amber-400 animate-pulse"
+              title="Lanjutkan dari Tag Hold"
+            >
+              <Play className="w-4 h-4 mr-2 fill-current" /> LANJUTKAN
+            </button>
+          )}
+
           {isCameraActive && (
             <button
               id="btn-toggle-record"
@@ -1000,15 +1032,17 @@ export default function App() {
               autoPlay 
               muted 
               playsInline 
-              className="w-full h-full object-cover -scale-x-100 opacity-60"
+              className="w-full h-full object-cover opacity-60"
             />
           </div>
         )}
 
-        {countdown !== null && (
+        {(countdown !== null || resumeCountdown !== null) && (
           <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none bg-black/60 backdrop-blur-sm">
             <span className="text-[12rem] md:text-[16rem] font-black text-emerald-400 drop-shadow-[0_0_40px_rgba(16,185,129,0.8)] animate-pulse select-none">
-              {countdown > 0 ? countdown : "START!"}
+              {countdown !== null
+                ? (countdown > 0 ? countdown : "START!")
+                : (resumeCountdown !== null && resumeCountdown > 0 ? resumeCountdown : "LANJUT!")}
             </span>
           </div>
         )}

@@ -57,6 +57,7 @@ interface SavedConfig {
   punctuationDurations?: PunctuationDurations;
   mode: PrompterMode;
   maxWordsPerPhrase: number;
+  scriptText?: string;
 }
 
 const getSavedConfig = (): SavedConfig | null => {
@@ -84,7 +85,7 @@ export default function App() {
   const [premoLoading, setPremoLoading] = useState<boolean>(false);
 
   // 1. Script & Pacing States
-  const [scriptText, setScriptText] = useState<string>(INITIAL_SCRIPT);
+  const [scriptText, setScriptText] = useState<string>(savedConfig && savedConfig.scriptText ? savedConfig.scriptText : INITIAL_SCRIPT);
   const [wpm, setWpm] = useState<number>(savedConfig ? savedConfig.wpm : 130);
   const [autoPacing, setAutoPacing] = useState<boolean>(savedConfig ? savedConfig.autoPacing : true);
   const [punctuationDurations, setPunctuationDurations] = useState<PunctuationDurations>(
@@ -264,6 +265,24 @@ export default function App() {
   });
 
   const [showSaveSuccess, setShowSaveSuccess] = useState<boolean>(false);
+
+  // AUTO SAVE ALL CONFIGS
+  useEffect(() => {
+    const configToSave: SavedConfig = {
+      visualConfig,
+      wpm,
+      autoPacing,
+      punctuationDurations,
+      mode,
+      maxWordsPerPhrase,
+      scriptText
+    };
+    try {
+      localStorage.setItem(DEFAULT_STORAGE_KEY, JSON.stringify(configToSave));
+    } catch (e) {
+      console.error("Auto-save failed", e);
+    }
+  }, [visualConfig, wpm, autoPacing, punctuationDurations, mode, maxWordsPerPhrase, scriptText]);
 
   const saveAsDefault = () => {
     const configToSave: SavedConfig = {

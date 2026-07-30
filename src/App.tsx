@@ -30,7 +30,8 @@ import {
   Circle,
   Square,
   Download,
-  X
+  X,
+  FlipHorizontal
 } from "lucide-react";
 
 import { PrompterMode, VisualConfig, PunctuationDurations } from "./types";
@@ -151,14 +152,25 @@ export default function App() {
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [resumeCountdown, setResumeCountdown] = useState<number | null>(null);
+  const [isMirrored, setIsMirrored] = useState<boolean>(() => localStorage.getItem("rhythm_mirror") !== "false");
 
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
+  const drawLoopRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem("rhythm_mirror", isMirrored.toString());
+  }, [isMirrored]);
 
   const toggleCameraMode = async () => {
     if (isCameraActive) {
+      if (drawLoopRef.current) {
+        cancelAnimationFrame(drawLoopRef.current);
+        drawLoopRef.current = null;
+      }
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getTracks().forEach(track => track.stop());
       }
@@ -406,12 +418,43 @@ export default function App() {
     if (!mediaStreamRef.current) return;
     recordedChunksRef.current = [];
     try {
+      let streamToRecord: MediaStream = mediaStreamRef.current;
+      
+      if (isMirrored && videoRef.current && canvasRef.current) {
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext("2d");
+        
+        if (ctx) {
+          canvas.width = video.videoWidth || 1280;
+          canvas.height = video.videoHeight || 720;
+          
+          const draw = () => {
+            if (!video.paused && !video.ended) {
+              ctx.save();
+              ctx.translate(canvas.width, 0);
+              ctx.scale(-1, 1);
+              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+              ctx.restore();
+            }
+            drawLoopRef.current = requestAnimationFrame(draw);
+          };
+          draw();
+          
+          const canvasStream = canvas.captureStream(30);
+          streamToRecord = new MediaStream([
+            ...canvasStream.getVideoTracks(),
+            ...mediaStreamRef.current.getAudioTracks()
+          ]);
+        }
+      }
+
       const options = { mimeType: "video/webm; codecs=vp8,opus" };
       let recorder: MediaRecorder;
       if (MediaRecorder.isTypeSupported(options.mimeType)) {
-        recorder = new MediaRecorder(mediaStreamRef.current, options);
+        recorder = new MediaRecorder(streamToRecord, options);
       } else {
-        recorder = new MediaRecorder(mediaStreamRef.current);
+        recorder = new MediaRecorder(streamToRecord);
       }
       
       recorder.ondataavailable = (event) => {
@@ -425,6 +468,10 @@ export default function App() {
         const url = URL.createObjectURL(blob);
         setRecordedVideoUrl(url);
         setShowPreviewModal(true);
+        if (drawLoopRef.current) {
+          cancelAnimationFrame(drawLoopRef.current);
+          drawLoopRef.current = null;
+        }
       };
 
       recorder.start();
@@ -441,6 +488,10 @@ export default function App() {
   };
 
   const stopRecording = () => {
+    if (drawLoopRef.current) {
+      cancelAnimationFrame(drawLoopRef.current);
+      drawLoopRef.current = null;
+    }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
     }
@@ -831,14 +882,24 @@ export default function App() {
             }`}
           id="focus-mode-floating-controls"
         >
+          {isCameraActive && !isRecording && (
+            <button
+              onClick={() => setIsMirrored(prev => !prev)}
+              className="w-10 h-10 flex items-center justify-center rounded-none border transition active:scale-95 shadow-lg bg-neutral-800 text-neutral-300 border-neutral-700 hover:bg-neutral-700"
+              title={isMirrored ? "Matikan Efek Mirror" : "Nyalakan Efek Mirror"}
+            >
+              <FlipHorizontal className={`w-4 h-4 transition-transform duration-300 ${isMirrored ? "text-emerald-400" : ""}`} />
+            </button>
+          )}
+
           {isCameraActive && isHolding && (
             <button
               id="btn-resume-hold"
               onClick={() => setResumeCountdown(3)}
-              className="w-auto px-4 h-10 flex items-center justify-center font-bold text-xs uppercase tracking-wider rounded-none border transition active:scale-95 shadow-lg bg-amber-500 text-neutral-950 border-amber-400 hover:bg-amber-400 animate-pulse"
+              className="w-10 h-10 flex items-center justify-center rounded-none border transition active:scale-95 shadow-lg bg-amber-500 text-neutral-950 border-amber-400 hover:bg-amber-400 animate-pulse"
               title="Lanjutkan dari Tag Hold"
             >
-              <Play className="w-4 h-4 mr-2 fill-current" /> LANJUTKAN
+              <Play className="w-4 h-4 fill-current" />
             </button>
           )}
 
@@ -846,20 +907,17 @@ export default function App() {
             <button
               id="btn-toggle-record"
               onClick={isRecording ? stopRecording : () => setCountdown(3)}
-              className={`w-auto px-4 h-10 flex items-center justify-center font-bold text-xs uppercase tracking-wider rounded-none border transition active:scale-95 shadow-lg ${
+              className={`w-10 h-10 flex items-center justify-center rounded-none border transition active:scale-95 shadow-lg ${
                 isRecording
                   ? "bg-red-600 text-white border-red-500 hover:bg-red-500 animate-pulse"
-                  : "bg-neutral-900 text-red-400 border-red-900/50 hover:bg-neutral-800 hover:text-red-300"
+                  : "bg-emerald-600 text-white border-emerald-500 hover:bg-emerald-500"
               }`}
+              title={isRecording ? "Stop Perekaman" : "Mulai Rekam Video"}
             >
               {isRecording ? (
-                <>
-                  <Square className="w-4 h-4 mr-2 fill-current" /> STOP REKAM
-                </>
+                <Square className="w-4 h-4 fill-current" />
               ) : (
-                <>
-                  <Circle className="w-4 h-4 mr-2 fill-current" /> REKAM
-                </>
+                <Circle className="w-4 h-4 fill-current" />
               )}
             </button>
           )}
@@ -1032,8 +1090,9 @@ export default function App() {
               autoPlay 
               muted 
               playsInline 
-              className="w-full h-full object-cover opacity-60"
+              className={`w-full h-full object-cover opacity-60 ${isMirrored ? "-scale-x-100" : ""}`}
             />
+            <canvas ref={canvasRef} className="hidden" />
           </div>
         )}
 

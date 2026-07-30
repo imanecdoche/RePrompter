@@ -34,7 +34,8 @@ import {
   FlipHorizontal,
   Cast,
   Heart,
-  Coffee
+  Coffee,
+  Camera
 } from "lucide-react";
 import qrCodeImg from '../assets/qrcode.jfif';
 
@@ -44,6 +45,8 @@ import { usePrompterEngine } from "./hooks/usePrompterEngine";
 import ScriptEditor from "./components/ScriptEditor";
 import PrompterDisplay from "./components/PrompterDisplay";
 import { Footer } from "./components/Footer";
+import { QRCodeSVG } from 'qrcode.react';
+import QRScanner from "./components/QRScanner";
 
 // Firebase imports for PREMO realtime synchronization
 import { db } from "./lib/firebase";
@@ -86,6 +89,7 @@ export default function App() {
   const [premoError, setPremoError] = useState<string>("");
   const [premoShowSetup, setPremoShowSetup] = useState<boolean>(false);
   const [premoMonitorInput, setPremoMonitorInput] = useState<string>("");
+  const [premoShowScanner, setPremoShowScanner] = useState<boolean>(false);
   const [premoLoading, setPremoLoading] = useState<boolean>(false);
 
   const [remoteCameraActive, setRemoteCameraActive] = useState<boolean>(false);
@@ -709,12 +713,13 @@ export default function App() {
     }
   };
 
-  const handlePairMonitor = async () => {
-    if (premoMonitorInput.length < 4) return;
+  const handlePairMonitor = async (codeOverride?: string | React.MouseEvent) => {
+    const codeToUse = typeof codeOverride === 'string' ? codeOverride : premoMonitorInput;
+    if (codeToUse.length < 4) return;
     setPremoLoading(true);
     setPremoError("");
     try {
-      const docRef = doc(db, "premoSessions", premoMonitorInput);
+      const docRef = doc(db, "premoSessions", codeToUse);
       const docSnap = await getDoc(docRef);
       if (!docSnap.exists()) {
         setPremoError("Kode pairing tidak ditemukan. Silakan periksa kembali.");
@@ -731,17 +736,35 @@ export default function App() {
         isPaired: true,
         lastUpdated: Date.now()
       });
-      setPremoCode(premoMonitorInput);
+      setPremoCode(codeToUse);
       setPremoPaired(true);
       setPremoShowSetup(false);
       setIsFocusMode(true);
     } catch (e) {
       console.error("Error pairing monitor via Firestore", e);
-      setPremoError("Gagal terhubung ke database. Silakan coba lagi.");
     } finally {
       setPremoLoading(false);
+      // Clean up URL if it came from a QR code
+      if (typeof codeOverride === 'string') {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
     }
   };
+
+  // Auto connect from QR Code URL Parameter
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const connectCode = params.get("connectMonitor");
+    if (connectCode && connectCode.length >= 4) {
+      setPremoMonitorInput(connectCode);
+      setPremoRole("monitor");
+      setPremoShowSetup(true);
+      // Give time for state to settle, then connect
+      setTimeout(() => {
+        handlePairMonitor(connectCode);
+      }, 500);
+    }
+  }, []);
 
   // Controller pairing and status snapshot listener
   useEffect(() => {
@@ -1814,6 +1837,7 @@ export default function App() {
                     onClick={() => {
                       setPremoRole("monitor");
                       setPremoError("");
+                      setPremoShowScanner(false);
                     }}
                     className="flex flex-col items-center gap-3 p-5 border border-emerald-900/40 hover:border-emerald-600 bg-emerald-950/10 hover:bg-emerald-950/20 text-emerald-400 hover:text-white rounded-none transition active:scale-95 text-center group cursor-pointer"
                     id="premo-opt-monitor"
@@ -1841,8 +1865,19 @@ export default function App() {
                     MEMBUAT KODE...
                   </div>
                 ) : (
-                  <div className="bg-neutral-900 border border-neutral-800 px-8 py-4 font-mono font-extrabold text-3xl tracking-[0.5em] text-neutral-100 select-all" id="premo-pairing-code-display">
-                    {premoCode || "----"}
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="bg-white p-3 rounded-none shadow-xl border-4 border-neutral-800">
+                      <QRCodeSVG 
+                        value={`${window.location.origin}${window.location.pathname}?connectMonitor=${premoCode}`}
+                        size={160}
+                        level="Q"
+                        includeMargin={false}
+                      />
+                    </div>
+                    <div className="text-[10px] text-neutral-500 uppercase tracking-widest font-bold">Atau masukkan kode:</div>
+                    <div className="bg-neutral-900 border border-neutral-800 px-8 py-4 font-mono font-extrabold text-3xl tracking-[0.5em] text-neutral-100 select-all" id="premo-pairing-code-display">
+                      {premoCode || "----"}
+                    </div>
                   </div>
                 )}
 
@@ -1865,47 +1900,83 @@ export default function App() {
             {premoRole === "monitor" && (
               <div className="flex flex-col items-center text-center gap-4 py-3" id="premo-monitor-setup">
                 <span className="text-[10px] bg-emerald-950 text-emerald-400 px-2 py-0.5 border border-emerald-800 font-bold uppercase tracking-widest">MONITOR MODE</span>
-                <p className="text-xs text-neutral-400 leading-normal max-w-xs">
-                  Masukkan 4 digit kode pairing yang tampil di layar perangkat <strong className="text-purple-300 font-semibold">KONTROLER</strong>:
-                </p>
+                
+                {premoShowScanner ? (
+                  <div className="w-full max-w-sm">
+                    <QRScanner 
+                      onScan={(data) => {
+                        try {
+                          const url = new URL(data);
+                          const code = url.searchParams.get("connectMonitor");
+                          if (code && code.length >= 4) {
+                            setPremoShowScanner(false);
+                            setPremoMonitorInput(code);
+                            // Beri waktu sejenak agar state input terbarui sebelum pair
+                            setTimeout(() => handlePairMonitor(code), 300);
+                          } else {
+                            setPremoError("QR Code tidak valid atau bukan dari KONTROLER.");
+                            setPremoShowScanner(false);
+                          }
+                        } catch {
+                          // Jika data bukan URL valid
+                          if (data.length >= 4 && /^\d+$/.test(data)) {
+                            setPremoShowScanner(false);
+                            setPremoMonitorInput(data);
+                            setTimeout(() => handlePairMonitor(data), 300);
+                          } else {
+                            setPremoError("QR Code tidak dikenali.");
+                            setPremoShowScanner(false);
+                          }
+                        }
+                      }} 
+                      onCancel={() => setPremoShowScanner(false)} 
+                    />
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-xs text-neutral-400 leading-normal max-w-xs">
+                      Masukkan 4 digit kode pairing yang tampil di layar perangkat <strong className="text-purple-300 font-semibold">KONTROLER</strong> atau <button onClick={() => setPremoShowScanner(true)} className="text-emerald-400 underline hover:text-white font-bold cursor-pointer inline-flex items-center gap-1"><Camera className="w-3 h-3"/> Scan QR</button>:
+                    </p>
 
-                <input
-                  type="text"
-                  maxLength={4}
-                  value={premoMonitorInput}
-                  onChange={(e) => {
-                    const cleanValue = e.target.value.replace(/[^0-9]/g, "");
-                    setPremoMonitorInput(cleanValue);
-                    setPremoError("");
-                  }}
-                  placeholder="0000"
-                  className="bg-neutral-900 border-2 border-neutral-800 focus:border-emerald-500 text-center text-3xl font-mono font-extrabold tracking-[0.4em] py-3 text-neutral-100 placeholder-neutral-700 rounded-none focus:outline-none w-48 shadow-inner"
-                  id="premo-pairing-input"
-                  disabled={premoLoading}
-                  autoFocus
-                />
+                    <input
+                      type="text"
+                      maxLength={4}
+                      value={premoMonitorInput}
+                      onChange={(e) => {
+                        const cleanValue = e.target.value.replace(/[^0-9]/g, "");
+                        setPremoMonitorInput(cleanValue);
+                        setPremoError("");
+                      }}
+                      placeholder="0000"
+                      className="bg-neutral-900 border-2 border-neutral-800 focus:border-emerald-500 text-center text-3xl font-mono font-extrabold tracking-[0.4em] py-3 text-neutral-100 placeholder-neutral-700 rounded-none focus:outline-none w-48 shadow-inner"
+                      id="premo-pairing-input"
+                      disabled={premoLoading}
+                      autoFocus
+                    />
 
-                <div className="flex gap-3 w-full mt-3">
-                  <button
-                    onClick={() => {
-                      setPremoRole("none");
-                      setPremoMonitorInput("");
-                      setPremoError("");
-                    }}
-                    className="flex-1 py-2.5 text-xs font-bold border border-neutral-800 hover:border-neutral-700 text-neutral-400 rounded-none transition active:scale-95 cursor-pointer"
-                    id="premo-monitor-back"
-                  >
-                    KEMBALI
-                  </button>
-                  <button
-                    onClick={handlePairMonitor}
-                    disabled={premoMonitorInput.length < 4 || premoLoading}
-                    className="flex-1 py-2.5 text-xs font-bold bg-emerald-500 disabled:bg-neutral-900 text-neutral-950 disabled:text-neutral-600 disabled:border disabled:border-neutral-800 rounded-none transition active:scale-95 cursor-pointer"
-                    id="premo-monitor-submit"
-                  >
-                    {premoLoading ? "MENGHUBUNGKAN..." : "SINKRONISASI"}
-                  </button>
-                </div>
+                    <div className="flex gap-3 w-full mt-3">
+                      <button
+                        onClick={() => {
+                          setPremoRole("none");
+                          setPremoMonitorInput("");
+                          setPremoError("");
+                        }}
+                        className="flex-1 py-2.5 text-xs font-bold border border-neutral-800 hover:border-neutral-700 text-neutral-400 rounded-none transition active:scale-95 cursor-pointer"
+                        id="premo-monitor-back"
+                      >
+                        KEMBALI
+                      </button>
+                      <button
+                        onClick={handlePairMonitor}
+                        disabled={premoMonitorInput.length < 4 || premoLoading}
+                        className="flex-1 py-2.5 text-xs font-bold bg-emerald-500 disabled:bg-neutral-900 text-neutral-950 disabled:text-neutral-600 disabled:border disabled:border-neutral-800 rounded-none transition active:scale-95 cursor-pointer"
+                        id="premo-monitor-submit"
+                      >
+                        {premoLoading ? "MENGHUBUNGKAN..." : "SINKRONISASI"}
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>

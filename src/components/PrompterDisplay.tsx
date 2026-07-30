@@ -25,6 +25,7 @@ interface PrompterDisplayProps {
   onDragMove?: (clientY: number) => void;
   onDragEnd?: () => void;
   onDoubleClick?: () => void;
+  isCameraActive?: boolean;
 }
 
 export default function PrompterDisplay({
@@ -44,7 +45,8 @@ export default function PrompterDisplay({
   onDragStart,
   onDragMove,
   onDragEnd,
-  onDoubleClick
+  onDoubleClick,
+  isCameraActive = false
 }: PrompterDisplayProps) {
   const tickerContainerRef = useRef<HTMLDivElement | null>(null);
   const activeWordRef = useRef<HTMLSpanElement | null>(null);
@@ -110,6 +112,10 @@ export default function PrompterDisplay({
 
   // Theme styles mapper
   const getThemeClasses = () => {
+    if (isCameraActive) {
+      return "bg-black/40 backdrop-blur-sm border border-neutral-800 text-neutral-100 shadow-[0_0_30px_rgba(0,0,0,0.5)]";
+    }
+    
     switch (visualConfig.theme) {
       case "high-contrast":
         return "bg-black text-white border border-neutral-800";
@@ -187,11 +193,11 @@ export default function PrompterDisplay({
     const localTimeMs = elapsedTimeMs - activeWord.startTimeMs;
     const pauseStartMs = activeWord.durationMs;
     const totalPauseMs = activeWord.punctuationPauseMs + activeWord.customPauseMs;
-    
+
     if (totalPauseMs <= 0 || localTimeMs < pauseStartMs) {
       return 0;
     }
-    
+
     const elapsedPauseMs = localTimeMs - pauseStartMs;
     // Calculate remaining progress from 100% down to 0% (depleting)
     const ratio = Math.min(1, Math.max(0, elapsedPauseMs / totalPauseMs));
@@ -205,9 +211,8 @@ export default function PrompterDisplay({
       {/* 1. Visual Presentation Area (Press & Hold and clicks interact here) */}
       <div
         id="prompter-gesture-canvas"
-        className={`w-full aspect-[16/7.5] md:aspect-[16/7.5] flex flex-col items-center rounded-none p-6 md:p-12 transition-all cursor-pointer relative overflow-hidden shadow-2xl ${textPositionClasses} ${getThemeClasses()} ${getFontFamilyClass()} ${
-          isFocusMode ? "cursor-grab active:cursor-grabbing" : ""
-        }`}
+        className={`w-full aspect-[16/6.5] md:aspect-[16/3.5] flex flex-col items-center rounded-none p-6 md:p-12 transition-all cursor-pointer relative overflow-hidden shadow-2xl ${textPositionClasses} ${getThemeClasses()} ${getFontFamilyClass()} ${isFocusMode ? "cursor-grab active:cursor-grabbing" : ""
+          }`}
         onMouseDown={(e) => {
           if (onDragStart) {
             onDragStart(e.clientY);
@@ -309,8 +314,8 @@ export default function PrompterDisplay({
 
               {/* Tampilkan Kata Selanjutnya di bawahnya dg opacity 50% & ukuran yg sama jika aktif */}
               {visualConfig.showNextPreview && currentIndex < words.length - 1 && (
-                <div 
-                  style={{ fontSize: `${visualConfig.fontSize}px` }} 
+                <div
+                  style={{ fontSize: `${visualConfig.fontSize}px` }}
                   className="text-center text-neutral-400/50 font-bold tracking-wide transition-all duration-200 select-none"
                   id="word-next-preview"
                 >
@@ -356,12 +361,12 @@ export default function PrompterDisplay({
                         style={
                           isWordActive
                             ? {
-                                fontSize: `${visualConfig.fontSize}px`,
-                                color: w.isHold && isHolding ? "#f87171" : visualConfig.highlightColor
-                              }
+                              fontSize: `${visualConfig.fontSize}px`,
+                              color: w.isHold && isHolding ? "#f87171" : visualConfig.highlightColor
+                            }
                             : {
-                                fontSize: `${visualConfig.fontSize * 0.9}px`
-                              }
+                              fontSize: `${visualConfig.fontSize * 0.9}px`
+                            }
                         }
                         className={`${getFocalHighlightClasses(isWordActive)} inline-flex items-center gap-1 transition-all cursor-help`}
                         title={getWordTooltip(w)}
@@ -385,9 +390,9 @@ export default function PrompterDisplay({
 
               {/* Tampilkan Frasa Selanjutnya di bawahnya dg opacity 50% & ukuran yg sama jika aktif */}
               {visualConfig.showNextPreview && activePhraseIndex < phrases.length - 1 && (
-                <div 
-                  style={{ fontSize: `${visualConfig.fontSize}px` }} 
-                  className="text-center text-neutral-400/50 max-w-2xl font-bold leading-relaxed transition-all duration-200 select-none" 
+                <div
+                  style={{ fontSize: `${visualConfig.fontSize}px` }}
+                  className="text-center text-neutral-400/50 max-w-2xl font-bold leading-relaxed transition-all duration-200 select-none"
                   id="phrase-next-preview"
                 >
                   {phrases[activePhraseIndex + 1].text}
@@ -407,7 +412,7 @@ export default function PrompterDisplay({
               {visualConfig.tickerType !== "flat" && (
                 <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-emerald-500/40 pointer-events-none" />
               )}
-              
+
               <div className="flex gap-6 md:gap-10 px-[50%]" id="ticker-word-track">
                 {words.map((w) => {
                   const isWordActive = w.index === currentIndex;
@@ -425,20 +430,20 @@ export default function PrompterDisplay({
                       style={
                         visualConfig.tickerType === "flat"
                           ? {
-                              fontSize: `${visualConfig.fontSize}px`,
-                              color: visuallyActive
-                                ? (w.isHold && isHolding ? "#f87171" : visualConfig.highlightColor)
-                                : undefined
-                            }
+                            fontSize: `${visualConfig.fontSize}px`,
+                            color: visuallyActive
+                              ? (w.isHold && isHolding ? "#f87171" : visualConfig.highlightColor)
+                              : undefined
+                          }
                           : (visuallyActive
-                              ? {
-                                  fontSize: `${visualConfig.fontSize}px`,
-                                  color: w.isHold && isHolding ? "#f87171" : visualConfig.highlightColor
-                                }
-                              : {
-                                  fontSize: `${visualConfig.fontSize * 0.85}px`
-                                }
-                            )
+                            ? {
+                              fontSize: `${visualConfig.fontSize}px`,
+                              color: w.isHold && isHolding ? "#f87171" : visualConfig.highlightColor
+                            }
+                            : {
+                              fontSize: `${visualConfig.fontSize * 0.85}px`
+                            }
+                          )
                       }
                       className={`${getFocalHighlightClasses(visuallyActive)} inline-flex items-center gap-1 transition-all cursor-help`}
                       title={getWordTooltip(w)}
@@ -464,15 +469,15 @@ export default function PrompterDisplay({
       </div>
 
       {/* High-precision, zero-latency pause progress bar */}
-      <div 
-        className="w-full bg-neutral-950/90 h-1.5 relative overflow-hidden border border-neutral-900 rounded-none" 
+      <div
+        className="w-full bg-neutral-950/90 h-1.5 relative overflow-hidden border border-neutral-900 rounded-none"
         id="prompter-pause-progress-bar-wrap"
       >
         {/* [UI-NONPROGRAMMER] Warna progress bar. Ubah "bg-emerald-500" menjadi warna lain (misal: bg-blue-500) jika ingin mengganti warna bar jeda. */}
         <div
           id="prompter-pause-progress-bar"
           className="h-full bg-emerald-500"
-          style={{ 
+          style={{
             width: `${pauseProgress * 100}%`,
             transition: "none" // Force instant frame paint for flawless zero latency and ultra-smooth animations
           }}
@@ -517,11 +522,10 @@ export default function PrompterDisplay({
           <button
             id="btn-prompter-play-toggle"
             onClick={onTogglePlay}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-none transition active:scale-95 ${
-              isPlaying
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-none transition active:scale-95 ${isPlaying
                 ? "bg-amber-600/20 border border-amber-500/30 text-amber-300"
                 : "bg-emerald-600 text-neutral-950 hover:bg-emerald-500"
-            }`}
+              }`}
           >
             {isPlaying ? (
               <>

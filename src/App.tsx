@@ -24,7 +24,13 @@ import {
   Minimize,
   Tv,
   Smartphone,
-  Gamepad2
+  Gamepad2,
+  Video,
+  VideoOff,
+  Circle,
+  Square,
+  Download,
+  X
 } from "lucide-react";
 
 import { PrompterMode, VisualConfig, PunctuationDurations } from "./types";
@@ -93,7 +99,17 @@ export default function App() {
 
   // 5. Focus Mode State
   const [isFocusMode, setIsFocusMode] = useState<boolean>(false);
-  const [focusDragOffset, setFocusDragOffset] = useState<number>(0);
+  const [focusDragOffset, setFocusDragOffset] = useState<number>(() => {
+    const saved = localStorage.getItem("rhythmprompter_drag_offset");
+    return saved && !isNaN(parseInt(saved, 10)) ? parseInt(saved, 10) : 0;
+  });
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      localStorage.setItem("rhythmprompter_drag_offset", focusDragOffset.toString());
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [focusDragOffset]);
 
   const startYRef = useRef<number | null>(null);
   const startOffsetRef = useRef<number>(0);
@@ -127,6 +143,46 @@ export default function App() {
   };
 
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+
+  // CAMERA & RECORDING STATE
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordedVideoUrl, setRecordedVideoUrl] = useState<string | null>(null);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [countdown, setCountdown] = useState<number | null>(null);
+
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+
+  const toggleCameraMode = async () => {
+    if (isCameraActive) {
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+      setIsCameraActive(false);
+      setIsRecording(false);
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+        mediaRecorderRef.current.stop();
+      }
+    } else {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { frameRate: 30, facingMode: "user" },
+          audio: true
+        });
+        mediaStreamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+        setIsCameraActive(true);
+      } catch (err) {
+        console.error("Camera access error:", err);
+        alert("Gagal mengakses kamera/mikrofon. Pastikan izin telah diberikan.");
+      }
+    }
+  };
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -336,6 +392,92 @@ export default function App() {
     }
   };
 
+  // RECORDING LOGIC
+  const startRecording = () => {
+    if (!mediaStreamRef.current) return;
+    recordedChunksRef.current = [];
+    try {
+      const options = { mimeType: "video/webm; codecs=vp8,opus" };
+      let recorder: MediaRecorder;
+      if (MediaRecorder.isTypeSupported(options.mimeType)) {
+        recorder = new MediaRecorder(mediaStreamRef.current, options);
+      } else {
+        recorder = new MediaRecorder(mediaStreamRef.current);
+      }
+      
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          recordedChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const blob = new Blob(recordedChunksRef.current, { type: "video/webm" });
+        const url = URL.createObjectURL(blob);
+        setRecordedVideoUrl(url);
+        setShowPreviewModal(true);
+      };
+
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+      setIsRecording(true);
+      
+      if (!isPlaying) {
+        handleTogglePlay(); // Start prompter
+      }
+    } catch (e) {
+      console.error("Recording start error:", e);
+      alert("Gagal memulai perekaman. Format mungkin tidak didukung.");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
+    setIsRecording(false);
+    if (isPlaying) {
+      handleTogglePlay(); // Stop prompter
+    }
+  };
+
+  // Auto Pause/Resume Recording on [hold] tags
+  useEffect(() => {
+    if (isRecording && mediaRecorderRef.current) {
+      if (isHolding) {
+        if (mediaRecorderRef.current.state === "recording") {
+          mediaRecorderRef.current.pause();
+        }
+      } else {
+        if (mediaRecorderRef.current.state === "paused") {
+          mediaRecorderRef.current.resume();
+        }
+      }
+    }
+  }, [isHolding, isRecording]);
+
+  // Countdown Timer sebelum perekaman
+  useEffect(() => {
+    if (countdown === null) return;
+    if (countdown > 0) {
+      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+      return () => clearTimeout(timer);
+    } else {
+      setCountdown(null);
+      startRecording();
+    }
+  }, [countdown]);
+
+  // Auto Stop Recording saat naskah selesai (jeda 3 detik)
+  useEffect(() => {
+    if (isRecording && !isPlaying && words.length > 0 && currentIndex >= words.length - 1) {
+      const timer = setTimeout(() => {
+        stopRecording();
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [isPlaying, currentIndex, isRecording, words.length]);
+
   const handlePremoDisconnect = async () => {
     if (premoCode) {
       try {
@@ -429,7 +571,7 @@ export default function App() {
   // Controller pairing and status snapshot listener
   useEffect(() => {
     if (premoRole !== "controller" || !premoCode) return;
-    
+
     const docRef = doc(db, "premoSessions", premoCode);
     const unsubscribe = onSnapshot(docRef, (snapshot) => {
       if (!snapshot.exists()) {
@@ -663,12 +805,46 @@ export default function App() {
     <div className="min-h-screen bg-[#09090b] text-neutral-100 flex flex-col font-sans" id="rhythmprompter-app-root">
       {/* FLOATING CONTROLS (ONLY IN FOCUS MODE) - Moves to bottom if prompter is dragged/shifted upwards */}
       {isFocusMode && premoRole !== "monitor" && (
-        <div 
-          className={`fixed right-4 z-50 flex items-center gap-2 transition-all duration-300 ${
-            focusDragOffset < -50 ? "bottom-4 animate-slideUp" : "top-4"
-          }`} 
+        <div
+          className={`fixed right-4 z-50 flex items-center gap-2 transition-all duration-300 ${focusDragOffset < -50 ? "bottom-4 animate-slideUp" : "top-4"
+            }`}
           id="focus-mode-floating-controls"
         >
+          {isCameraActive && (
+            <button
+              id="btn-toggle-record"
+              onClick={isRecording ? stopRecording : () => setCountdown(3)}
+              className={`w-auto px-4 h-10 flex items-center justify-center font-bold text-xs uppercase tracking-wider rounded-none border transition active:scale-95 shadow-lg ${
+                isRecording
+                  ? "bg-red-600 text-white border-red-500 hover:bg-red-500 animate-pulse"
+                  : "bg-neutral-900 text-red-400 border-red-900/50 hover:bg-neutral-800 hover:text-red-300"
+              }`}
+            >
+              {isRecording ? (
+                <>
+                  <Square className="w-4 h-4 mr-2 fill-current" /> STOP REKAM
+                </>
+              ) : (
+                <>
+                  <Circle className="w-4 h-4 mr-2 fill-current" /> REKAM
+                </>
+              )}
+            </button>
+          )}
+
+          <button
+            id="btn-toggle-camera"
+            onClick={toggleCameraMode}
+            className={`w-10 h-10 flex items-center justify-center rounded-none border transition active:scale-95 ${
+              isCameraActive 
+                ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/30"
+                : "bg-neutral-900 border-neutral-700 text-neutral-200 hover:bg-neutral-800 hover:text-white"
+            }`}
+            title={isCameraActive ? "Matikan Kamera" : "Aktifkan Kamera"}
+          >
+            {isCameraActive ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
+          </button>
+
           {/* [UI-NONPROGRAMMER] Tombol aksi layar penuh. Ubah warna hover pada 'hover:bg-neutral-800' jika perlu. */}
           <button
             id="btn-toggle-fullscreen"
@@ -697,10 +873,9 @@ export default function App() {
 
       {/* PREMO MONITOR MODE EXCLUSIVE FLOATING BAR */}
       {isFocusMode && premoRole === "monitor" && premoPaired && (
-        <div 
-          className={`fixed left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-neutral-950/95 border border-neutral-800 px-4 py-2 shadow-2xl transition-all duration-300 ${
-            (visualConfig.textPosition === "top" || focusDragOffset < -50) ? "bottom-4 animate-slideUp" : "top-4"
-          }`}
+        <div
+          className={`fixed left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-neutral-950/95 border border-neutral-800 px-4 py-2 shadow-2xl transition-all duration-300 ${(visualConfig.textPosition === "top" || focusDragOffset < -50) ? "bottom-4 animate-slideUp" : "top-4"
+            }`}
           id="premo-monitor-bar"
         >
           <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 tracking-wider uppercase select-none">
@@ -736,12 +911,10 @@ export default function App() {
         <header className="border-b border-neutral-800 bg-[#0c0c0e] px-4 md:px-8 py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-4" id="app-main-header">
           <div className="flex items-center justify-between md:justify-start gap-4">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-none bg-emerald-500/10 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-black text-sm shadow-[0_0_15px_rgba(16,185,129,0.15)]" id="brand-logo-icon">
-                R
-              </div>
+              <img src="/favicon.png" alt="RePrompter Logo" className="w-8 h-8 rounded-none object-contain shadow-[0_0_15px_rgba(16,185,129,0.15)]" id="brand-logo-icon" />
               <div>
                 <h1 className="text-sm font-extrabold tracking-tight text-neutral-100 flex items-center gap-1.5">
-                  RhythmPrompter
+                  RePrompter
                   <span className="text-[10px] bg-emerald-950 text-emerald-300 px-1.5 py-0.5 rounded-none font-bold border border-emerald-800">
                     PRO v1.2
                   </span>
@@ -762,7 +935,7 @@ export default function App() {
                   PREMO Mode
                 </button>
               )}
-              
+
               {premoRole === "controller" && !premoPaired && (
                 <div className="flex items-center gap-2 bg-purple-950/50 text-purple-300 border border-purple-800 px-3 py-1.5 text-xs font-bold uppercase tracking-wider" id="premo-pairing-header">
                   <span className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" />
@@ -815,21 +988,41 @@ export default function App() {
       )}
 
       {/* DASHBOARD GRID CONTENT */}
-      <main className={isFocusMode 
+      <main className={isFocusMode
         ? "flex-1 max-w-4xl w-full mx-auto p-4 md:p-8 flex flex-col justify-center items-center gap-6 relative min-h-[calc(100vh-2rem)]"
         : "flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-6"
       } id="dashboard-main-grid">
-        
+
+        {isCameraActive && isFocusMode && (
+          <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none flex items-center justify-center">
+            <video 
+              ref={videoRef}
+              autoPlay 
+              muted 
+              playsInline 
+              className="w-full h-full object-cover -scale-x-100 opacity-60"
+            />
+          </div>
+        )}
+
+        {countdown !== null && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none bg-black/60 backdrop-blur-sm">
+            <span className="text-[12rem] md:text-[16rem] font-black text-emerald-400 drop-shadow-[0_0_40px_rgba(16,185,129,0.8)] animate-pulse select-none">
+              {countdown > 0 ? countdown : "START!"}
+            </span>
+          </div>
+        )}
+
         {/* LEFT COLUMN: ACTIVE VIEW (CAMERA PREVIEW + TELEPROMPTER OVERLAY) - (Span 7 / Full in Focus Mode) */}
-        <section 
-          className={isFocusMode ? "w-full flex flex-col gap-5 justify-center transition-transform duration-75 ease-out" : "lg:col-span-7 flex flex-col gap-4"} 
+        <section
+          className={isFocusMode ? "w-full flex flex-col gap-5 justify-center transition-transform duration-75 ease-out" : "lg:col-span-7 flex flex-col gap-4"}
           style={isFocusMode ? { transform: `translateY(${focusDragOffset}px)` } : undefined}
           id="left-prompter-column"
         >
-          
+
           {!isFocusMode && (
             <div className="flex items-center justify-between px-1" id="prompter-section-header">
-              <h2 className="text-xs font-bold uppercase tracking-widest text-neutral-500 flex items-center gap-1.5">
+              <h2 className="text-xs text-neutral-500 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-none bg-emerald-500 animate-pulse" />
                 Prompter Live Canvas
               </h2>
@@ -841,12 +1034,8 @@ export default function App() {
                   title="Masuk Mode Fokus (Sembunyikan Konfigurasi)"
                 >
                   <Eye className="w-3.5 h-3.5" />
-                  <span>Mode Fokus (F)</span>
+                  <span>Mode Fokus</span>
                 </button>
-                <div className="hidden md:flex items-center gap-1.5 text-[11px] text-neutral-400">
-                  <Zap className="w-3 h-3 text-yellow-400 animate-bounce" />
-                  Sesuaikan kecepatan baca dengan tempo suara Anda!
-                </div>
               </div>
             </div>
           )}
@@ -873,12 +1062,12 @@ export default function App() {
           />
 
           {/* LOWER CONTROLLER HUB */}
-          {(!isFocusMode || premoRole !== "monitor") && (
-            <div 
+          {!isCameraActive && (!isFocusMode || premoRole !== "monitor") && (
+            <div
               className={isFocusMode
                 ? "flex items-center justify-center p-2 mt-4"
                 : "bg-neutral-900 border border-neutral-800 p-4 rounded-none flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg shadow-black/40"
-              } 
+              }
               id="prompter-control-hub"
             >
               {/* Playback navigation buttons */}
@@ -896,11 +1085,10 @@ export default function App() {
                 <button
                   id="btn-nav-play-toggle"
                   onClick={handleTogglePlay}
-                  className={`px-8 py-2.5 h-12 font-bold text-xs rounded-none transition active:scale-95 flex items-center gap-2.5 shadow-xl uppercase tracking-wider ${
-                    isPlaying
-                      ? "bg-amber-600 text-white hover:bg-amber-500 shadow-amber-950/25 border border-amber-500"
-                      : "bg-emerald-500 text-neutral-950 hover:bg-emerald-400 shadow-emerald-950/25 border border-emerald-400"
-                  }`}
+                  className={`px-8 py-2.5 h-12 font-bold text-xs rounded-none transition active:scale-95 flex items-center gap-2.5 shadow-xl uppercase tracking-wider ${isPlaying
+                    ? "bg-amber-600 text-white hover:bg-amber-500 shadow-amber-950/25 border border-amber-500"
+                    : "bg-emerald-500 text-neutral-950 hover:bg-emerald-400 shadow-emerald-950/25 border border-emerald-400"
+                    }`}
                 >
                   {isPlaying ? (
                     <>
@@ -955,322 +1143,316 @@ export default function App() {
         {/* RIGHT COLUMN: CONFIG STATION (SCRIPT, STYLING, HOTKEYS) - (Span 5) */}
         {!isFocusMode && (
           <section className="lg:col-span-5 flex flex-col gap-4" id="right-config-column">
-          {/* Header Tab System */}
-          <div className="flex border-b border-neutral-800 bg-[#0c0c0e] p-1 rounded-none" id="config-tabs-navigation">
-            {[
-              { id: "editor", label: "Teks Naskah", icon: Sliders },
-              { id: "styling", label: "Gaya Tampilan", icon: Type },
-              { id: "hotkeys", label: "Shortcut", icon: Keyboard }
-            ].map((tab) => {
-              const TabIcon = tab.icon;
-              return (
-                <button
-                  key={tab.id}
-                  id={`tab-btn-${tab.id}`}
-                  onClick={() => setActiveTab(tab.id as any)}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-none transition-all ${
-                    activeTab === tab.id
+            {/* Header Tab System */}
+            <div className="flex border-b border-neutral-800 bg-[#0c0c0e] p-1 rounded-none" id="config-tabs-navigation">
+              {[
+                { id: "editor", label: "Teks Naskah", icon: Sliders },
+                { id: "styling", label: "Gaya Tampilan", icon: Type },
+                { id: "hotkeys", label: "Shortcut", icon: Keyboard }
+              ].map((tab) => {
+                const TabIcon = tab.icon;
+                return (
+                  <button
+                    key={tab.id}
+                    id={`tab-btn-${tab.id}`}
+                    onClick={() => setActiveTab(tab.id as any)}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-none transition-all ${activeTab === tab.id
                       ? "bg-neutral-900 text-emerald-400 shadow-sm"
                       : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900/40"
-                  }`}
-                >
-                  <TabIcon className="w-3.5 h-3.5" />
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
-          </div>
+                      }`}
+                  >
+                    <TabIcon className="w-3.5 h-3.5" />
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
 
-          {/* TAB CONTENTS (No nesting of cards - directly flat panel content) */}
-          <div className="flex-1 bg-neutral-950/40 border border-neutral-800/60 p-5 rounded-none flex flex-col gap-4" id="config-panel-content">
-            {activeTab === "editor" && (
-              <ScriptEditor
-                text={scriptText}
-                onChangeText={setScriptText}
-                wpm={wpm}
-                onChangeWpm={setWpm}
-                autoPacing={autoPacing}
-                onChangeAutoPacing={setAutoPacing}
-                punctuationDurations={punctuationDurations}
-                onChangePunctuationDurations={setPunctuationDurations}
-                mode={mode}
-                onChangeMode={setMode}
-                maxWordsPerPhrase={maxWordsPerPhrase}
-                onChangeMaxWordsPerPhrase={setMaxWordsPerPhrase}
-                wordCount={wordCount}
-                estimatedDurationMs={estimatedDurationMs}
-                pauseTagsCount={pauseTagsCount}
-                holdTagsCount={holdTagsCount}
-                tickerType={visualConfig.tickerType || "focus"}
-                onChangeTickerType={(type) =>
-                  setVisualConfig((prev) => ({ ...prev, tickerType: type }))
-                }
-                phraseHighlightType={visualConfig.phraseHighlightType || "word"}
-                onChangePhraseHighlightType={(type) =>
-                  setVisualConfig((prev) => ({ ...prev, phraseHighlightType: type }))
-                }
-                disableWordHighlight={!!visualConfig.disableWordHighlight}
-                onChangeDisableWordHighlight={(disable) =>
-                  setVisualConfig((prev) => ({ ...prev, disableWordHighlight: disable }))
-                }
-              />
-            )}
+            {/* TAB CONTENTS (No nesting of cards - directly flat panel content) */}
+            <div className="flex-1 bg-neutral-950/40 border border-neutral-800/60 p-5 rounded-none flex flex-col gap-4" id="config-panel-content">
+              {activeTab === "editor" && (
+                <ScriptEditor
+                  text={scriptText}
+                  onChangeText={setScriptText}
+                  wpm={wpm}
+                  onChangeWpm={setWpm}
+                  autoPacing={autoPacing}
+                  onChangeAutoPacing={setAutoPacing}
+                  punctuationDurations={punctuationDurations}
+                  onChangePunctuationDurations={setPunctuationDurations}
+                  mode={mode}
+                  onChangeMode={setMode}
+                  maxWordsPerPhrase={maxWordsPerPhrase}
+                  onChangeMaxWordsPerPhrase={setMaxWordsPerPhrase}
+                  wordCount={wordCount}
+                  estimatedDurationMs={estimatedDurationMs}
+                  pauseTagsCount={pauseTagsCount}
+                  holdTagsCount={holdTagsCount}
+                  tickerType={visualConfig.tickerType || "focus"}
+                  onChangeTickerType={(type) =>
+                    setVisualConfig((prev) => ({ ...prev, tickerType: type }))
+                  }
+                  phraseHighlightType={visualConfig.phraseHighlightType || "word"}
+                  onChangePhraseHighlightType={(type) =>
+                    setVisualConfig((prev) => ({ ...prev, phraseHighlightType: type }))
+                  }
+                  disableWordHighlight={!!visualConfig.disableWordHighlight}
+                  onChangeDisableWordHighlight={(disable) =>
+                    setVisualConfig((prev) => ({ ...prev, disableWordHighlight: disable }))
+                  }
+                />
+              )}
 
-            {activeTab === "styling" && (
-              <div className="flex flex-col gap-5" id="styling-config-panel">
-                <h3 className="text-sm font-bold text-neutral-300 flex items-center gap-2 border-b border-neutral-800/60 pb-2">
-                  <Type className="w-4 h-4 text-emerald-400" />
-                  Visual & Tipografi Prompter
-                </h3>
+              {activeTab === "styling" && (
+                <div className="flex flex-col gap-5" id="styling-config-panel">
+                  <h3 className="text-sm font-bold text-neutral-300 flex items-center gap-2 border-b border-neutral-800/60 pb-2">
+                    <Type className="w-4 h-4 text-emerald-400" />
+                    Visual & Tipografi Prompter
+                  </h3>
 
-                {/* Font Size Configuration */}
-                <div className="flex flex-col gap-1.5" id="font-size-slider-group">
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs font-semibold text-neutral-400">Ukuran Font Teks</span>
-                    <span className="text-xs font-bold text-emerald-400">{visualConfig.fontSize}px</span>
+                  {/* Font Size Configuration */}
+                  <div className="flex flex-col gap-1.5" id="font-size-slider-group">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-semibold text-neutral-400">Ukuran Font Teks</span>
+                      <span className="text-xs font-bold text-emerald-400">{visualConfig.fontSize}px</span>
+                    </div>
+                    <input
+                      id="slider-font-size"
+                      type="range"
+                      min="20"
+                      max="72"
+                      step="1"
+                      value={visualConfig.fontSize}
+                      onChange={(e) =>
+                        setVisualConfig((prev) => ({ ...prev, fontSize: parseInt(e.target.value) }))
+                      }
+                      className="w-full accent-emerald-500 cursor-pointer"
+                    />
                   </div>
-                  <input
-                    id="slider-font-size"
-                    type="range"
-                    min="20"
-                    max="72"
-                    step="1"
-                    value={visualConfig.fontSize}
-                    onChange={(e) =>
-                      setVisualConfig((prev) => ({ ...prev, fontSize: parseInt(e.target.value) }))
-                    }
-                    className="w-full accent-emerald-500 cursor-pointer"
-                  />
-                </div>
 
-                {/* Text overlay background opacity */}
-                <div className="flex flex-col gap-1.5" id="overlay-opacity-slider-group">
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs font-semibold text-neutral-400">Kepekatan Latar Belakang (Opacity)</span>
-                    <span className="text-xs font-bold text-emerald-400">{visualConfig.overlayOpacity}%</span>
+                  {/* Text overlay background opacity */}
+                  <div className="flex flex-col gap-1.5" id="overlay-opacity-slider-group">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-semibold text-neutral-400">Kepekatan Latar Belakang (Opacity)</span>
+                      <span className="text-xs font-bold text-emerald-400">{visualConfig.overlayOpacity}%</span>
+                    </div>
+                    <input
+                      id="slider-overlay-opacity"
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="5"
+                      value={visualConfig.overlayOpacity}
+                      onChange={(e) =>
+                        setVisualConfig((prev) => ({ ...prev, overlayOpacity: parseInt(e.target.value) }))
+                      }
+                      className="w-full accent-emerald-500 cursor-pointer"
+                    />
+                    <span className="text-[9px] text-neutral-500 leading-tight">
+                      Mengatur kegelapan tirai di belakang tulisan agar tetap mudah dibaca.
+                    </span>
                   </div>
-                  <input
-                    id="slider-overlay-opacity"
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="5"
-                    value={visualConfig.overlayOpacity}
-                    onChange={(e) =>
-                      setVisualConfig((prev) => ({ ...prev, overlayOpacity: parseInt(e.target.value) }))
-                    }
-                    className="w-full accent-emerald-500 cursor-pointer"
-                  />
-                  <span className="text-[9px] text-neutral-500 leading-tight">
-                    Mengatur kegelapan tirai di belakang tulisan agar tetap mudah dibaca.
-                  </span>
-                </div>
 
-                {/* Highlight active word colors */}
-                <div className="flex flex-col gap-2" id="highlight-color-options">
-                  <span className="text-xs font-semibold text-neutral-400">Warna Focal Word (Highlight)</span>
-                  <div className="flex gap-2">
-                    {[
-                      { hex: "#facc15", name: "Yellow" },
-                      { hex: "#10b981", name: "Emerald" },
-                      { hex: "#06b6d4", name: "Cyan" },
-                      { hex: "#ec4899", name: "Pink" },
-                      { hex: "#ffffff", name: "White" }
-                    ].map((color) => (
-                      <button
-                        key={color.hex}
-                        id={`color-btn-${color.name.toLowerCase()}`}
-                        onClick={() =>
-                          setVisualConfig((prev) => ({ ...prev, highlightColor: color.hex }))
-                        }
-                        className={`w-8 h-8 rounded-none transition relative ${
-                          visualConfig.highlightColor === color.hex
+                  {/* Highlight active word colors */}
+                  <div className="flex flex-col gap-2" id="highlight-color-options">
+                    <span className="text-xs font-semibold text-neutral-400">Warna Focal Word (Highlight)</span>
+                    <div className="flex gap-2">
+                      {[
+                        { hex: "#facc15", name: "Yellow" },
+                        { hex: "#10b981", name: "Emerald" },
+                        { hex: "#06b6d4", name: "Cyan" },
+                        { hex: "#ec4899", name: "Pink" },
+                        { hex: "#ffffff", name: "White" }
+                      ].map((color) => (
+                        <button
+                          key={color.hex}
+                          id={`color-btn-${color.name.toLowerCase()}`}
+                          onClick={() =>
+                            setVisualConfig((prev) => ({ ...prev, highlightColor: color.hex }))
+                          }
+                          className={`w-8 h-8 rounded-none transition relative ${visualConfig.highlightColor === color.hex
                             ? "ring-2 ring-emerald-400 ring-offset-2 ring-offset-neutral-950"
                             : ""
-                        }`}
-                        style={{ backgroundColor: color.hex }}
-                        title={color.name}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                {/* Text position relative to screen */}
-                <div className="flex flex-col gap-2" id="text-position-options">
-                  <span className="text-xs font-semibold text-neutral-400">Letak Teks (Eye-Line Alignment)</span>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { pos: "top", label: "Atas" },
-                      { pos: "center", label: "Tengah" },
-                      { pos: "bottom", label: "Bawah" }
-                    ].map((item) => (
-                      <button
-                        key={item.pos}
-                        id={`pos-btn-${item.pos}`}
-                        onClick={() =>
-                          setVisualConfig((prev) => ({ ...prev, textPosition: item.pos as any }))
-                        }
-                        className={`py-1.5 rounded-none text-xs font-semibold border transition ${
-                          visualConfig.textPosition === item.pos
-                            ? "bg-neutral-900 border-emerald-500 text-emerald-300"
-                            : "bg-neutral-950 border-neutral-800 text-neutral-400 hover:border-neutral-700"
-                        }`}
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                  <span className="text-[9px] text-neutral-500 leading-tight">
-                    *Rekomendasi: Pilih posisi <strong>Atas</strong> agar arah pandang mata Anda tetap fokus ke bagian atas layar saat membaca.
-                  </span>
-                </div>
-
-                {/* Font Family select */}
-                <div className="flex flex-col gap-2" id="font-family-options">
-                  <span className="text-xs font-semibold text-neutral-400">Jenis Huruf (Font Family)</span>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { family: "sans", label: "Sans-Serif" },
-                      { family: "serif", label: "Serif" },
-                      { family: "mono", label: "Monospace" }
-                    ].map((item) => (
-                      <button
-                        key={item.family}
-                        id={`font-btn-${item.family}`}
-                        onClick={() =>
-                          setVisualConfig((prev) => ({ ...prev, fontFamily: item.family as any }))
-                        }
-                        className={`py-1.5 rounded-none text-xs font-semibold border transition ${
-                          visualConfig.fontFamily === item.family
-                            ? "bg-neutral-900 border-emerald-500 text-emerald-300"
-                            : "bg-neutral-950 border-neutral-800 text-neutral-400 hover:border-neutral-700"
-                        }`}
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Visual Theme Presets */}
-                <div className="flex flex-col gap-2" id="preset-themes-options">
-                  <span className="text-xs font-semibold text-neutral-400">Tema Latar & Style Canvas</span>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { id: "dark-overlay", label: "Dark Transparent" },
-                      { id: "high-contrast", label: "High Contrast (Black)" },
-                      { id: "neon-glass", label: "Neon Glass Indigo" },
-                      { id: "classic-light", label: "Classic Light" }
-                    ].map((theme) => (
-                      <button
-                        key={theme.id}
-                        id={`theme-btn-${theme.id}`}
-                        onClick={() =>
-                          setVisualConfig((prev) => ({ ...prev, theme: theme.id as any }))
-                        }
-                        className={`py-2 px-3 rounded-none text-xs font-semibold border text-left transition ${
-                          visualConfig.theme === theme.id
-                            ? "bg-neutral-900 border-emerald-500 text-emerald-300"
-                            : "bg-neutral-950 border-neutral-800 text-neutral-400 hover:border-neutral-700"
-                        }`}
-                      >
-                        {theme.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Fitur Pratinjau Teks Selanjutnya */}
-                <div className="flex flex-col gap-3 bg-neutral-950 p-3 rounded-none border border-neutral-800" id="show-next-preview-toggle-container">
-                  <div className="flex items-center justify-between">
-                    <div className="flex flex-col">
-                      <span className="text-xs font-semibold text-neutral-300">Tampilkan Frasa/Kata Selanjutnya</span>
-                      <span className="text-[10px] text-neutral-500 leading-tight">Menampilkan teks berikutnya di bawah kata/frasa utama (opacity 50%)</span>
+                            }`}
+                          style={{ backgroundColor: color.hex }}
+                          title={color.name}
+                        />
+                      ))}
                     </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        id="show-next-preview-checkbox"
-                        type="checkbox"
-                        checked={!!visualConfig.showNextPreview}
-                        onChange={(e) =>
-                          setVisualConfig((prev) => ({ ...prev, showNextPreview: e.target.checked }))
-                        }
-                        className="sr-only peer"
-                      />
-                      <div className="w-9 h-5 bg-neutral-800 peer-focus:outline-none rounded-none peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-neutral-300 after:border-neutral-300 after:border after:rounded-none after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600 peer-checked:after:bg-white" />
-                    </label>
+                  </div>
+
+                  {/* Text position relative to screen */}
+                  <div className="flex flex-col gap-2" id="text-position-options">
+                    <span className="text-xs font-semibold text-neutral-400">Letak Teks (Eye-Line Alignment)</span>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { pos: "top", label: "Atas" },
+                        { pos: "center", label: "Tengah" },
+                        { pos: "bottom", label: "Bawah" }
+                      ].map((item) => (
+                        <button
+                          key={item.pos}
+                          id={`pos-btn-${item.pos}`}
+                          onClick={() =>
+                            setVisualConfig((prev) => ({ ...prev, textPosition: item.pos as any }))
+                          }
+                          className={`py-1.5 rounded-none text-xs font-semibold border transition ${visualConfig.textPosition === item.pos
+                            ? "bg-neutral-900 border-emerald-500 text-emerald-300"
+                            : "bg-neutral-950 border-neutral-800 text-neutral-400 hover:border-neutral-700"
+                            }`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                    <span className="text-[9px] text-neutral-500 leading-tight">
+                      *Rekomendasi: Pilih posisi <strong>Atas</strong> agar arah pandang mata Anda tetap fokus ke bagian atas layar saat membaca.
+                    </span>
+                  </div>
+
+                  {/* Font Family select */}
+                  <div className="flex flex-col gap-2" id="font-family-options">
+                    <span className="text-xs font-semibold text-neutral-400">Jenis Huruf (Font Family)</span>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { family: "sans", label: "Sans-Serif" },
+                        { family: "serif", label: "Serif" },
+                        { family: "mono", label: "Monospace" }
+                      ].map((item) => (
+                        <button
+                          key={item.family}
+                          id={`font-btn-${item.family}`}
+                          onClick={() =>
+                            setVisualConfig((prev) => ({ ...prev, fontFamily: item.family as any }))
+                          }
+                          className={`py-1.5 rounded-none text-xs font-semibold border transition ${visualConfig.fontFamily === item.family
+                            ? "bg-neutral-900 border-emerald-500 text-emerald-300"
+                            : "bg-neutral-950 border-neutral-800 text-neutral-400 hover:border-neutral-700"
+                            }`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Visual Theme Presets */}
+                  <div className="flex flex-col gap-2" id="preset-themes-options">
+                    <span className="text-xs font-semibold text-neutral-400">Tema Latar & Style Canvas</span>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { id: "dark-overlay", label: "Dark Transparent" },
+                        { id: "high-contrast", label: "High Contrast (Black)" },
+                        { id: "neon-glass", label: "Neon Glass Indigo" },
+                        { id: "classic-light", label: "Classic Light" }
+                      ].map((theme) => (
+                        <button
+                          key={theme.id}
+                          id={`theme-btn-${theme.id}`}
+                          onClick={() =>
+                            setVisualConfig((prev) => ({ ...prev, theme: theme.id as any }))
+                          }
+                          className={`py-2 px-3 rounded-none text-xs font-semibold border text-left transition ${visualConfig.theme === theme.id
+                            ? "bg-neutral-900 border-emerald-500 text-emerald-300"
+                            : "bg-neutral-950 border-neutral-800 text-neutral-400 hover:border-neutral-700"
+                            }`}
+                        >
+                          {theme.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Fitur Pratinjau Teks Selanjutnya */}
+                  <div className="flex flex-col gap-3 bg-neutral-950 p-3 rounded-none border border-neutral-800" id="show-next-preview-toggle-container">
+                    <div className="flex items-center justify-between">
+                      <div className="flex flex-col">
+                        <span className="text-xs font-semibold text-neutral-300">Tampilkan Frasa/Kata Selanjutnya</span>
+                        <span className="text-[10px] text-neutral-500 leading-tight">Menampilkan teks berikutnya di bawah kata/frasa utama (opacity 50%)</span>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          id="show-next-preview-checkbox"
+                          type="checkbox"
+                          checked={!!visualConfig.showNextPreview}
+                          onChange={(e) =>
+                            setVisualConfig((prev) => ({ ...prev, showNextPreview: e.target.checked }))
+                          }
+                          className="sr-only peer"
+                        />
+                        <div className="w-9 h-5 bg-neutral-800 peer-focus:outline-none rounded-none peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-neutral-300 after:border-neutral-300 after:border after:rounded-none after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600 peer-checked:after:bg-white" />
+                      </label>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {activeTab === "hotkeys" && (
-              <div className="flex flex-col gap-5" id="hotkeys-config-panel">
-                <h3 className="text-sm font-bold text-neutral-300 flex items-center gap-2 border-b border-neutral-800/60 pb-2">
-                  <Keyboard className="w-4 h-4 text-emerald-400" />
-                  Akses Cepat & Keyboard Shortcut
-                </h3>
+              {activeTab === "hotkeys" && (
+                <div className="flex flex-col gap-5" id="hotkeys-config-panel">
+                  <h3 className="text-sm font-bold text-neutral-300 flex items-center gap-2 border-b border-neutral-800/60 pb-2">
+                    <Keyboard className="w-4 h-4 text-emerald-400" />
+                    Akses Cepat & Keyboard Shortcut
+                  </h3>
 
-                <p className="text-xs text-neutral-400 leading-relaxed">
-                  Gunakan tombol-tombol fisik keyboard Anda saat memproduksi video agar proses kontrol teleprompter tetap mulus tanpa memerlukan kursor mouse:
-                </p>
-
-                <div className="flex flex-col gap-3" id="shortcuts-legend-list">
-                  {[
-                    { key: "Spasi (Spacebar)", desc: "Mulai / Jeda (Toggle Play/Pause) jalannya prompter" },
-                    { key: "Arrow Right (Kanan)", desc: "Maju satu kata/frasa atau bypass status HOLD" },
-                    { key: "Arrow Left (Kiri)", desc: "Kembali ke kata/frasa sebelumnya" },
-                    { key: "Esc (Escape)", desc: "Reset jalannya teks kembali ke posisi awal naskah" },
-                    { key: "F", desc: "Toggle Mode Fokus (Sembunyikan Konfigurasi)" },
-                    { key: "Hold Klik (Mouse/Tap)", desc: "Menahan sejenak tempo prompter selama ditekan" },
-                    { key: "Drag Layar Up/Down", desc: "Geser posisi tinggi teks prompter ke atas / bawah" },
-                    { key: "Double Klik Layar", desc: "Reset pergeseran teks kembali ke tengah layar" }
-                  ].map((shortcut, index) => (
-                    <div
-                      key={index}
-                      className="flex justify-between items-center bg-neutral-950 p-2.5 rounded-none border border-neutral-800"
-                      id={`shortcut-item-${index}`}
-                    >
-                      <span className="text-[11px] font-bold text-neutral-300">{shortcut.desc}</span>
-                      <kbd className="px-2 py-0.5 bg-neutral-900 text-emerald-400 border border-neutral-800 rounded-none font-mono text-[10px] whitespace-nowrap shadow">
-                        {shortcut.key}
-                      </kbd>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="p-3 bg-neutral-900/60 border border-neutral-800 rounded-none flex items-start gap-2.5 mt-2" id="hotkey-tip-banner">
-                  <Info className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                  <p className="text-[10px] text-neutral-400 leading-normal">
-                    *Catatan: Tombol shortcut dinonaktifkan secara otomatis ketika kursor Anda aktif mengetik di dalam kolom input/textarea editor naskah.
+                  <p className="text-xs text-neutral-400 leading-relaxed">
+                    Gunakan tombol-tombol fisik keyboard Anda saat memproduksi video agar proses kontrol teleprompter tetap mulus tanpa memerlukan kursor mouse:
                   </p>
-                </div>
-              </div>
-            )}
-          </div>
 
-          {/* SET DEFAULT ACTION BANNER */}
-          <div className="bg-neutral-950/40 border border-neutral-800/60 p-4 rounded-none flex items-center justify-between gap-4" id="set-default-banner">
-            <div className="flex flex-col gap-0.5">
-              <span className="text-xs font-bold text-neutral-300">Setelan Bawaan (Default)</span>
-              <span className="text-[10px] text-neutral-500 leading-normal">
-                Simpan tempo, pacing, mode, dan gaya saat ini sebagai bawaan aplikasi.
-              </span>
+                  <div className="flex flex-col gap-3" id="shortcuts-legend-list">
+                    {[
+                      { key: "Spasi (Spacebar)", desc: "Mulai / Jeda (Toggle Play/Pause) jalannya prompter" },
+                      { key: "Arrow Right (Kanan)", desc: "Maju satu kata/frasa atau bypass status HOLD" },
+                      { key: "Arrow Left (Kiri)", desc: "Kembali ke kata/frasa sebelumnya" },
+                      { key: "Esc (Escape)", desc: "Reset jalannya teks kembali ke posisi awal naskah" },
+                      { key: "F", desc: "Toggle Mode Fokus (Sembunyikan Konfigurasi)" },
+                      { key: "Hold Klik (Mouse/Tap)", desc: "Menahan sejenak tempo prompter selama ditekan" },
+                      { key: "Drag Layar Up/Down", desc: "Geser posisi tinggi teks prompter ke atas / bawah" },
+                      { key: "Double Klik Layar", desc: "Reset pergeseran teks kembali ke tengah layar" }
+                    ].map((shortcut, index) => (
+                      <div
+                        key={index}
+                        className="flex justify-between items-center bg-neutral-950 p-2.5 rounded-none border border-neutral-800"
+                        id={`shortcut-item-${index}`}
+                      >
+                        <span className="text-[11px] font-bold text-neutral-300">{shortcut.desc}</span>
+                        <kbd className="px-2 py-0.5 bg-neutral-900 text-emerald-400 border border-neutral-800 rounded-none font-mono text-[10px] whitespace-nowrap shadow">
+                          {shortcut.key}
+                        </kbd>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="p-3 bg-neutral-900/60 border border-neutral-800 rounded-none flex items-start gap-2.5 mt-2" id="hotkey-tip-banner">
+                    <Info className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                    <p className="text-[10px] text-neutral-400 leading-normal">
+                      *Catatan: Tombol shortcut dinonaktifkan secara otomatis ketika kursor Anda aktif mengetik di dalam kolom input/textarea editor naskah.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
-            <button
-              onClick={saveAsDefault}
-              className={`px-4 py-2 font-bold text-xs uppercase tracking-wider transition-all duration-300 active:scale-95 whitespace-nowrap ${
-                showSaveSuccess
+
+            {/* SET DEFAULT ACTION BANNER */}
+            <div className="bg-neutral-950/40 border border-neutral-800/60 p-4 rounded-none flex items-center justify-between gap-4" id="set-default-banner">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs font-bold text-neutral-300">Setelan Bawaan (Default)</span>
+                <span className="text-[10px] text-neutral-500 leading-normal">
+                  Simpan tempo, pacing, mode, dan gaya saat ini sebagai bawaan aplikasi.
+                </span>
+              </div>
+              <button
+                onClick={saveAsDefault}
+                className={`px-4 py-2 font-bold text-xs uppercase tracking-wider transition-all duration-300 active:scale-95 whitespace-nowrap ${showSaveSuccess
                   ? "bg-emerald-500 text-neutral-950"
                   : "bg-neutral-900 text-emerald-400 hover:text-emerald-300 border border-neutral-800 hover:border-neutral-700"
-              }`}
-              id="btn-set-default"
-            >
-              {showSaveSuccess ? "Tersimpan! ✓" : "Set Default"}
-            </button>
-          </div>
-        </section>
-      )}
+                  }`}
+                id="btn-set-default"
+              >
+                {showSaveSuccess ? "Tersimpan! ✓" : "Set Default"}
+              </button>
+            </div>
+          </section>
+        )}
 
       </main>
 
@@ -1288,11 +1470,11 @@ export default function App() {
                 <Tv className="w-5 h-5 text-purple-400" />
                 <h3 className="text-sm font-extrabold text-neutral-100 tracking-wider uppercase">PREMO (Previewer & Monitor)</h3>
               </div>
-              <button 
+              <button
                 onClick={() => {
                   setPremoShowSetup(false);
                   setPremoError("");
-                }} 
+                }}
                 className="text-neutral-500 hover:text-neutral-300 font-bold text-xs p-1 cursor-pointer"
                 id="premo-modal-close"
               >
@@ -1428,6 +1610,52 @@ export default function App() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* VIDEO PREVIEW MODAL */}
+      {showPreviewModal && recordedVideoUrl && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4">
+          <div className="bg-neutral-950 border border-neutral-800 p-4 md:p-6 rounded-none w-full max-w-3xl flex flex-col gap-4 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <Video className="w-5 h-5 text-emerald-400" />
+                Preview Hasil Rekaman
+              </h3>
+              <button 
+                onClick={() => {
+                  setShowPreviewModal(false);
+                  URL.revokeObjectURL(recordedVideoUrl);
+                  setRecordedVideoUrl(null);
+                }}
+                className="text-neutral-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="relative w-full aspect-video bg-black border border-neutral-800">
+              <video src={recordedVideoUrl} controls className="w-full h-full object-contain" />
+            </div>
+            <div className="flex justify-end gap-3 mt-2">
+              <button
+                onClick={() => {
+                  setShowPreviewModal(false);
+                  URL.revokeObjectURL(recordedVideoUrl);
+                  setRecordedVideoUrl(null);
+                }}
+                className="px-4 py-2 text-sm font-bold bg-neutral-900 border border-neutral-700 text-neutral-300 hover:text-white hover:bg-neutral-800 transition"
+              >
+                Tutup & Hapus
+              </button>
+              <a
+                href={recordedVideoUrl}
+                download={`RePrompter_Record_${new Date().getTime()}.webm`}
+                className="px-4 py-2 text-sm font-bold bg-emerald-600 text-neutral-950 hover:bg-emerald-500 transition flex items-center gap-2"
+              >
+                <Download className="w-4 h-4" /> Unduh Video
+              </a>
+            </div>
           </div>
         </div>
       )}

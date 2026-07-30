@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { FileText, Plus, HelpCircle, Settings2, Sliders, Layers, Sparkles, Volume2, ChevronDown, ChevronUp } from "lucide-react";
 import { PrompterMode, PunctuationDurations } from "../types";
 
@@ -34,15 +34,15 @@ interface ScriptEditorProps {
 
 const SCRIPT_PRESETS = [
   {
-    title: "Template Shorts / Reels (Indonesian)",
+    title: "Template Shorts (Ind)",
     text: "Halo semuanya! [pause:1.0] Selamat datang di RhythmPrompter. Hari ini kita membongkar rahasia bicara di depan kamera secara natural. [pause:1.5] Kuncinya bukan membaca teks terus-menerus, tapi memahami irama kalimat. [pause:0.8] Coba perhatikan bagaimana tulisan ini berhenti sejenak ketika saya ingin menekankan poin penting. [pause:1.2] Dan sekarang, teleprompter ini akan menunggu saya [hold] sampai saya menekan tombol lanjut atau mengetuk layar. Keren banget kan? Cobain deh!"
   },
   {
-    title: "Interactive Tech Review (English)",
+    title: "Template Shorts (Eng)",
     text: "Hey guys! [pause:0.8] Today we are reviewing the modular Dynamic Prompter. [pause:1.2] Conventional teleprompters make you sound robotic, scrolling at a rigid speed. [pause:1.0] But this system adapts to human speech rhythms. [pause:0.6] See how a period naturally adds a brief rest? [pause:0.8] And if I need to stop to showcase the product, [hold] the prompter holds perfectly. Tap spacebar or click to resume whenever you are ready!"
   },
   {
-    title: "Naskah Kosong",
+    title: "Clear",
     text: ""
   }
 ];
@@ -87,7 +87,7 @@ const SecureSlider: React.FC<SecureSliderProps> = ({
     const clientX = e.clientX;
     const relativeX = clientX - rect.left;
     const fraction = Math.min(1, Math.max(0, relativeX / rect.width));
-    
+
     let rawValue = min + fraction * (max - min);
     const stepsCount = Math.round((rawValue - min) / step);
     let steppedValue = min + stepsCount * step;
@@ -108,14 +108,14 @@ const SecureSlider: React.FC<SecureSliderProps> = ({
         <span className="font-semibold text-neutral-300">{label}</span>
         <span className="font-bold text-emerald-400">{displayValue}</span>
       </div>
-      
-      <div 
+
+      <div
         ref={containerRef}
         className="relative w-full h-4 flex items-center select-none"
       >
         {/* Track Bar (No pointer events to prevent accidental clicks!) */}
         <div className="absolute w-full h-1 bg-neutral-900 rounded-lg pointer-events-none border border-neutral-800">
-          <div 
+          <div
             className="h-full bg-emerald-500 rounded-lg"
             style={{ width: `${percentage}%` }}
           />
@@ -124,7 +124,7 @@ const SecureSlider: React.FC<SecureSliderProps> = ({
         {/* Head Handle (Thumb) - Interactive and secure */}
         <div
           className="absolute w-4 h-4 rounded-full bg-emerald-500 border-2 border-white shadow-[0_0_6px_rgba(16,185,129,0.4)] cursor-grab active:cursor-grabbing hover:scale-110 transition-transform duration-75 flex items-center justify-center z-10"
-          style={{ 
+          style={{
             left: `calc(${percentage}% - 8px)`,
             touchAction: "none"
           }}
@@ -167,6 +167,33 @@ export default function ScriptEditor({
   const [showTagHelp, setShowTagHelp] = useState(false);
   const [isPuncCollapse, setIsPuncCollapse] = useState(false);
 
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
+
+  const handleScroll = () => {
+    if (textareaRef.current && backdropRef.current) {
+      backdropRef.current.scrollTop = textareaRef.current.scrollTop;
+      backdropRef.current.scrollLeft = textareaRef.current.scrollLeft;
+    }
+  };
+
+  const renderHighlightedText = (content: string) => {
+    if (!content) return null;
+    const regex = /(\[pause:\d+(?:\.\d+)?\]|\[hold\])/gi;
+    const parts = content.split(regex);
+    
+    return parts.map((part, i) => {
+      if (regex.test(part)) {
+        return (
+          <span key={i} className="bg-emerald-500/20 text-emerald-400 rounded-sm font-medium font-mono px-0.5 mx-0.5">
+            {part}
+          </span>
+        );
+      }
+      return <span key={i} className="text-neutral-200">{part}</span>;
+    });
+  };
+
   const injectTag = (tag: string) => {
     const textarea = document.getElementById("script-textarea") as HTMLTextAreaElement | null;
     if (!textarea) return;
@@ -181,7 +208,7 @@ export default function ScriptEditor({
     // Ensure whitespace surrounding injected tag
     const formattedTag = `${before.endsWith(" ") || start === 0 ? "" : " "}${tag}${after.startsWith(" ") || end === value.length ? "" : " "}`;
     const newText = before + formattedTag + after;
-    
+
     onChangeText(newText);
 
     // Restore focus and cursor position after render
@@ -209,7 +236,7 @@ export default function ScriptEditor({
       <div className="flex flex-col gap-2" id="preset-selector-header">
         <label className="text-sm font-semibold text-neutral-300 flex items-center gap-2">
           <FileText className="w-4 h-4 text-emerald-400" />
-          Pilih Template Naskah
+          Template Naskah
         </label>
         <div className="flex flex-wrap gap-2">
           {SCRIPT_PRESETS.map((preset, index) => (
@@ -258,7 +285,6 @@ export default function ScriptEditor({
 
         {/* Action Injectors Row */}
         <div className="flex flex-wrap gap-2 items-center" id="quick-injectors-row">
-          <span className="text-xs text-neutral-500 font-medium">Sisipkan Tag:</span>
           <button
             id="btn-inject-pause-0-5"
             onClick={() => injectTag("[pause:0.5]")}
@@ -266,7 +292,16 @@ export default function ScriptEditor({
             title="Sisipkan tag jeda selama 0.5 detik [pause:0.5] di naskah untuk menghentikan gulir sejenak"
           >
             <Plus className="w-3 h-3 text-emerald-400" />
-            Jeda 0.5s
+            0.5s
+          </button>
+          <button
+            id="btn-inject-pause-1-0"
+            onClick={() => injectTag("[pause:1.0]")}
+            className="px-2.5 py-1 bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-300 text-xs rounded-none font-medium transition flex items-center gap-1"
+            title="Sisipkan tag jeda selama 1.0 detik [pause:1.0] di naskah untuk jeda kalimat"
+          >
+            <Plus className="w-3 h-3 text-emerald-400" />
+            1.0s
           </button>
           <button
             id="btn-inject-pause-1-5"
@@ -275,7 +310,7 @@ export default function ScriptEditor({
             title="Sisipkan tag jeda selama 1.5 detik [pause:1.5] di naskah untuk jeda nafas atau intonasi alami"
           >
             <Plus className="w-3 h-3 text-emerald-400" />
-            Jeda 1.5s
+            1.5s
           </button>
           <button
             id="btn-inject-hold"
@@ -284,17 +319,34 @@ export default function ScriptEditor({
             title="Sisipkan tag penahan [hold] untuk menghentikan gulir otomatis sepenuhnya sampai Anda mengklik layar atau tombol Selanjutnya"
           >
             <Plus className="w-3 h-3 text-emerald-400" />
-            Tahan (Hold)
+            Hold
           </button>
         </div>
 
-        <textarea
-          id="script-textarea"
-          value={text}
-          onChange={(e) => onChangeText(e.target.value)}
-          placeholder="Tuliskan script pembuka Anda di sini, sisipkan tag [pause:1.5] untuk menciptakan jeda alami bagi penonton..."
-          className="w-full h-44 bg-neutral-950 border border-neutral-800 rounded-none px-4 py-3 text-sm text-neutral-200 placeholder-neutral-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20 font-sans leading-relaxed resize-y"
-        />
+        {/* [UI-NONPROGRAMMER] Container editor naskah dengan syntax highlighting */}
+        <div className="relative w-full h-44 rounded-none border border-neutral-800 bg-neutral-950 focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500/20 resize-y overflow-hidden group">
+          {/* Backdrop untuk highlight tag */}
+          <div 
+            ref={backdropRef}
+            aria-hidden="true"
+            className="absolute inset-0 w-full h-full px-4 py-3 text-sm font-sans leading-relaxed whitespace-pre-wrap break-words overflow-hidden pointer-events-none"
+          >
+            {renderHighlightedText(text)}
+            {text.endsWith('\n') ? <br /> : null}
+          </div>
+          
+          <textarea
+            id="script-textarea"
+            ref={textareaRef}
+            value={text}
+            onScroll={handleScroll}
+            onChange={(e) => onChangeText(e.target.value)}
+            placeholder="Tuliskan script pembuka Anda di sini, sisipkan tag [pause:1.5] untuk menciptakan jeda alami bagi penonton..."
+            className="absolute inset-0 w-full h-full bg-transparent text-transparent caret-white px-4 py-3 text-sm font-sans leading-relaxed resize-none focus:outline-none overflow-auto"
+            style={{ color: 'transparent', caretColor: 'white' }}
+            spellCheck="false"
+          />
+        </div>
       </div>
 
       {/* 3. Real-time Analysis stats row */}
@@ -332,19 +384,18 @@ export default function ScriptEditor({
           </span>
           <div className="grid grid-cols-3 gap-2">
             {[
-              { mode: PrompterMode.WORD, label: "Word-by-Word", desc: "Satu kata terpusat (RSVP)" },
-              { mode: PrompterMode.PHRASE, label: "Frasa (Clause)", desc: "Potongan 2-4 kata per kloter" },
-              { mode: PrompterMode.TICKER, label: "Ticker Teks", desc: "Running text mendatar" }
+              { mode: PrompterMode.WORD, label: "Word-by-Word" },
+              { mode: PrompterMode.PHRASE, label: "Frasa (Clause)" },
+              { mode: PrompterMode.TICKER, label: "Ticker Teks" }
             ].map((item) => (
               <button
                 key={item.mode}
                 id={`mode-btn-${item.mode.toLowerCase()}`}
                 onClick={() => onChangeMode(item.mode)}
-                className={`p-2 rounded-none text-left border transition-all ${
-                  mode === item.mode
-                    ? "bg-emerald-500/10 border-emerald-500 text-emerald-300 font-semibold"
-                    : "bg-neutral-950 border-neutral-800 text-neutral-400 hover:border-neutral-700 hover:text-neutral-300"
-                }`}
+                className={`p-2 rounded-none text-left border transition-all ${mode === item.mode
+                  ? "bg-emerald-500/10 border-emerald-500 text-emerald-300 font-semibold"
+                  : "bg-neutral-950 border-neutral-800 text-neutral-400 hover:border-neutral-700 hover:text-neutral-300"
+                  }`}
               >
                 <span className="text-xs block">{item.label}</span>
                 <span className="text-[10px] text-neutral-500 font-normal leading-tight block mt-0.5">{item.desc}</span>
@@ -354,13 +405,13 @@ export default function ScriptEditor({
         </div>
 
         {/* Extra controls for WPM / Pause durations */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4" id="range-sliders-block">
+        <div className="flex flex-col gap-4" id="range-sliders-block">
           {/* Speed slider */}
           <div className="flex flex-col gap-1.5">
             <div className="flex justify-between items-center">
               <span className="text-xs font-semibold text-neutral-400 flex items-center gap-1">
                 <Volume2 className="w-3.5 h-3.5 text-neutral-500" />
-                Tempo Bicara (Speed)
+                Tempo
               </span>
               <span className="text-xs font-bold text-emerald-400">{wpm} WPM</span>
             </div>
@@ -375,9 +426,9 @@ export default function ScriptEditor({
               className="w-full accent-emerald-500 cursor-pointer"
             />
             <div className="flex justify-between text-[10px] text-neutral-500">
-              <span>Lambat (60)</span>
-              <span>Sedang (130)</span>
-              <span>Cepat (300)</span>
+              <span>Lambat</span>
+              <span>Sedang</span>
+              <span>Cepat</span>
             </div>
           </div>
 
@@ -484,8 +535,7 @@ export default function ScriptEditor({
           <div className="flex flex-col gap-3 bg-neutral-950 p-3 rounded-none border border-neutral-800 animate-slideDown" id="phrase-mode-settings-panel">
             <div className="flex items-center justify-between">
               <div className="flex flex-col">
-                <span className="text-xs font-semibold text-neutral-300">Maksimal Kata per Frasa</span>
-                <span className="text-[10px] text-neutral-500">Jumlah kata sebelum otomatis dipotong ke kloter berikutnya</span>
+                <span className="text-xs font-semibold text-neutral-300">Max Word Each Phrase</span>
               </div>
               <div className="flex items-center gap-1">
                 {[2, 3, 4, 5].map((count) => (
@@ -493,11 +543,10 @@ export default function ScriptEditor({
                     key={count}
                     id={`phrase-word-count-btn-${count}`}
                     onClick={() => onChangeMaxWordsPerPhrase(count)}
-                    className={`w-8 h-8 rounded-none text-xs font-bold border transition ${
-                      maxWordsPerPhrase === count
-                        ? "bg-emerald-500 text-neutral-950 border-emerald-500"
-                        : "bg-neutral-900 text-neutral-400 border-neutral-800 hover:border-neutral-700"
-                    }`}
+                    className={`w-8 h-8 rounded-none text-xs font-bold border transition ${maxWordsPerPhrase === count
+                      ? "bg-emerald-500 text-neutral-950 border-emerald-500"
+                      : "bg-neutral-900 text-neutral-400 border-neutral-800 hover:border-neutral-700"
+                      }`}
                   >
                     {count}
                   </button>
@@ -507,23 +556,21 @@ export default function ScriptEditor({
 
             <div className="pt-2 border-t border-neutral-900 flex items-center justify-between">
               <div className="flex flex-col">
-                <span className="text-xs font-semibold text-neutral-300">Gaya Sorotan Frasa</span>
-                <span className="text-[10px] text-neutral-500">Sorotan per kata atau langsung satu frasa utuh</span>
+                <span className="text-xs font-semibold text-neutral-300">Highlight Mode</span>
               </div>
               <div className="flex items-center gap-1 bg-neutral-900 p-0.5 rounded-none border border-neutral-800">
                 {[
-                  { type: "word", label: "Highlight Per Kata" },
-                  { type: "phrase", label: "Satu Frasa Utuh" }
+                  { type: "word", label: "Each Word" },
+                  { type: "phrase", label: "Whole Phrase" }
                 ].map((item) => (
                   <button
                     key={item.type}
                     id={`phrase-highlight-btn-${item.type}`}
                     onClick={() => onChangePhraseHighlightType?.(item.type as "word" | "phrase")}
-                    className={`px-3 py-1.5 rounded-none text-xs font-bold transition-all ${
-                      (phraseHighlightType || "word") === item.type
-                        ? "bg-emerald-500 text-neutral-950"
-                        : "text-neutral-400 hover:text-neutral-200"
-                    }`}
+                    className={`px-3 py-1.5 rounded-none text-xs font-bold transition-all ${(phraseHighlightType || "word") === item.type
+                      ? "bg-emerald-500 text-neutral-950"
+                      : "text-neutral-400 hover:text-neutral-200"
+                      }`}
                   >
                     {item.label}
                   </button>
@@ -550,11 +597,10 @@ export default function ScriptEditor({
                     key={item.type}
                     id={`ticker-type-btn-${item.type}`}
                     onClick={() => onChangeTickerType?.(item.type as "focus" | "flat")}
-                    className={`px-3 py-1.5 rounded-none text-xs font-bold transition-all ${
-                      (tickerType || "focus") === item.type
-                        ? "bg-emerald-500 text-neutral-950"
-                        : "text-neutral-400 hover:text-neutral-200"
-                    }`}
+                    className={`px-3 py-1.5 rounded-none text-xs font-bold transition-all ${(tickerType || "focus") === item.type
+                      ? "bg-emerald-500 text-neutral-950"
+                      : "text-neutral-400 hover:text-neutral-200"
+                      }`}
                   >
                     {item.label}
                   </button>
@@ -576,11 +622,10 @@ export default function ScriptEditor({
                     key={item.disabled ? "disabled" : "enabled"}
                     id={`ticker-highlight-btn-${item.disabled ? "disabled" : "enabled"}`}
                     onClick={() => onChangeDisableWordHighlight?.(item.disabled)}
-                    className={`px-3 py-1.5 rounded-none text-xs font-bold transition-all ${
-                      !!disableWordHighlight === item.disabled
-                        ? "bg-emerald-500 text-neutral-950"
-                        : "text-neutral-400 hover:text-neutral-200"
-                    }`}
+                    className={`px-3 py-1.5 rounded-none text-xs font-bold transition-all ${!!disableWordHighlight === item.disabled
+                      ? "bg-emerald-500 text-neutral-950"
+                      : "text-neutral-400 hover:text-neutral-200"
+                      }`}
                   >
                     {item.label}
                   </button>

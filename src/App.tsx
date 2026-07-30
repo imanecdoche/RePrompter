@@ -194,7 +194,10 @@ export default function App() {
     } else {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { frameRate: videoConfig.fps, facingMode: "user" },
+          video: { 
+            frameRate: { ideal: videoConfig.fps, max: videoConfig.fps }, 
+            facingMode: "user" 
+          },
           audio: {
             echoCancellation: false,
             noiseSuppression: false,
@@ -499,12 +502,15 @@ export default function App() {
         }
       }
 
-      let options: MediaRecorderOptions = { mimeType: "video/webm; codecs=vp8,opus" };
+      let options: MediaRecorderOptions = { 
+        mimeType: "video/webm; codecs=vp8,opus",
+        videoBitsPerSecond: videoConfig.fps === 60 ? 5000000 : 3000000 
+      };
       if (videoConfig.codec === "mp4") {
-        if (MediaRecorder.isTypeSupported("video/mp4")) {
-          options = { mimeType: "video/mp4" };
-        } else if (MediaRecorder.isTypeSupported("video/mp4; codecs=avc1")) {
-          options = { mimeType: "video/mp4; codecs=avc1" };
+        if (MediaRecorder.isTypeSupported("video/mp4; codecs=avc1")) {
+          options = { mimeType: "video/mp4; codecs=avc1", videoBitsPerSecond: videoConfig.fps === 60 ? 5000000 : 3000000 };
+        } else if (MediaRecorder.isTypeSupported("video/mp4")) {
+          options = { mimeType: "video/mp4", videoBitsPerSecond: videoConfig.fps === 60 ? 5000000 : 3000000 };
         } else {
           console.warn("MP4 not supported by MediaRecorder, falling back to WebM");
         }
@@ -1183,7 +1189,7 @@ export default function App() {
                 playsInline 
                 className={`w-full h-full object-cover opacity-60 ${isMirrored ? "-scale-x-100" : ""}`}
               />
-              <canvas ref={canvasRef} className="hidden" />
+              <canvas ref={canvasRef} className="absolute opacity-0 pointer-events-none w-[1px] h-[1px]" />
             </div>
           </div>
         )}

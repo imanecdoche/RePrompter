@@ -84,6 +84,11 @@ export default function App() {
   const [premoMonitorInput, setPremoMonitorInput] = useState<string>("");
   const [premoLoading, setPremoLoading] = useState<boolean>(false);
 
+  const [remoteCameraActive, setRemoteCameraActive] = useState<boolean>(false);
+  const [remoteRecording, setRemoteRecording] = useState<boolean>(false);
+  const [remoteMirrored, setRemoteMirrored] = useState<boolean>(false);
+  const [remoteHolding, setRemoteHolding] = useState<boolean>(false);
+
   // 1. Script & Pacing States
   const [scriptText, setScriptText] = useState<string>(savedConfig && savedConfig.scriptText ? savedConfig.scriptText : INITIAL_SCRIPT);
   const [wpm, setWpm] = useState<number>(savedConfig ? savedConfig.wpm : 130);
@@ -760,6 +765,13 @@ export default function App() {
           visualConfig
         });
       }
+      
+      if (data.monitorState) {
+        setRemoteCameraActive(data.monitorState.isCameraActive ?? false);
+        setRemoteRecording(data.monitorState.isRecording ?? false);
+        setRemoteMirrored(data.monitorState.isMirrored ?? false);
+        setRemoteHolding(data.monitorState.isHolding ?? false);
+      }
     }, (error) => {
       console.error("Error in controller snapshot listener:", error);
     });
@@ -823,9 +835,30 @@ export default function App() {
       setExactTime,
       skipNext,
       skipPrev,
-      handlePremoDisconnect
+      handlePremoDisconnect,
+      toggleCameraMode,
+      startRecording: () => setCountdown(3),
+      stopRecording,
+      setIsMirrored,
+      handleRestartTake,
+      setResumeCountdown
     };
   });
+
+  // Monitor pushes its camera/recording state to Controller
+  useEffect(() => {
+    if (premoRole === "monitor" && premoPaired && premoCode) {
+      const docRef = doc(db, "premoSessions", premoCode);
+      updateDoc(docRef, {
+        monitorState: {
+          isCameraActive,
+          isRecording,
+          isMirrored,
+          isHolding
+        }
+      }).catch(e => console.error("Error updating monitor state", e));
+    }
+  }, [isCameraActive, isRecording, isMirrored, isHolding, premoRole, premoPaired, premoCode]);
 
   useEffect(() => {
     if (premoRole !== "monitor" || !premoPaired || !premoCode) return;
@@ -883,6 +916,18 @@ export default function App() {
         } else if (action === "skipNext" || action === "skipPrev" || action === "setIndex" || action === "sync" || action === "init") {
           const targetElapsed = (remote.elapsedTimeMs ?? 0) + (remote.isPlaying ? latencyMs : 0);
           setExactTime(targetElapsed, remote.isPlaying);
+        } else if (action === "toggleCamera") {
+          prompterActionsRef.current.toggleCameraMode();
+        } else if (action === "startRecording") {
+          prompterActionsRef.current.startRecording();
+        } else if (action === "stopRecording") {
+          prompterActionsRef.current.stopRecording();
+        } else if (action === "toggleMirror") {
+          prompterActionsRef.current.setIsMirrored((prev: boolean) => !prev);
+        } else if (action === "restartRecording") {
+          prompterActionsRef.current.handleRestartTake();
+        } else if (action === "resumeHold") {
+          prompterActionsRef.current.setResumeCountdown(3);
         }
       } else if (remote.isPlaying) {
         // Continuous latency drift correction during playback
@@ -966,6 +1011,35 @@ export default function App() {
     };
   }, [handleTogglePlay, handleSkipNext, handleSkipPrev, handleReset, handlePause, setIsFocusMode, premoRole, premoPaired, words, currentIndex]);
 
+  const getCameraActive = () => premoRole === "controller" ? remoteCameraActive : isCameraActive;
+  const getRecording = () => premoRole === "controller" ? remoteRecording : isRecording;
+  const getMirrored = () => premoRole === "controller" ? remoteMirrored : isMirrored;
+  const getHolding = () => premoRole === "controller" ? remoteHolding : isHolding;
+  
+  const handleCameraBtn = () => {
+    if (premoRole === "controller") broadcastPremoState("toggleCamera");
+    else toggleCameraMode();
+  };
+  const handleRecordBtn = () => {
+    if (premoRole === "controller") broadcastPremoState(getRecording() ? "stopRecording" : "startRecording");
+    else {
+      if (isRecording) stopRecording();
+      else setCountdown(3);
+    }
+  };
+  const handleMirrorBtn = () => {
+    if (premoRole === "controller") broadcastPremoState("toggleMirror");
+    else setIsMirrored(prev => !prev);
+  };
+  const handleRestartBtn = () => {
+    if (premoRole === "controller") broadcastPremoState("restartRecording");
+    else setShowRestartDialog(true);
+  };
+  const handleResumeHoldBtn = () => {
+    if (premoRole === "controller") broadcastPremoState("resumeHold");
+    else setResumeCountdown(3);
+  };
+
   return (
     <div className="min-h-screen bg-[#09090b] text-neutral-100 flex flex-col font-sans" id="rhythmprompter-app-root">
       {/* FLOATING CONTROLS (ONLY IN FOCUS MODE) - Moves to bottom if prompter is dragged/shifted upwards */}
@@ -975,9 +1049,9 @@ export default function App() {
             }`}
           id="focus-mode-floating-controls"
         >
-          {isCameraActive && (
+          {getCameraActive() && (
             <button
-              onClick={() => setShowRestartDialog(true)}
+              onClick={handleRestartBtn}
               className="w-10 h-10 flex items-center justify-center rounded-none border transition active:scale-95 shadow-lg bg-neutral-800 text-neutral-300 border-neutral-700 hover:bg-neutral-700"
               title="Ulangi dari Awal"
             >
@@ -985,20 +1059,20 @@ export default function App() {
             </button>
           )}
 
-          {isCameraActive && !isRecording && (
+          {getCameraActive() && !getRecording() && (
             <button
-              onClick={() => setIsMirrored(prev => !prev)}
+              onClick={handleMirrorBtn}
               className="w-10 h-10 flex items-center justify-center rounded-none border transition active:scale-95 shadow-lg bg-neutral-800 text-neutral-300 border-neutral-700 hover:bg-neutral-700"
-              title={isMirrored ? "Matikan Efek Mirror" : "Nyalakan Efek Mirror"}
+              title={getMirrored() ? "Matikan Efek Mirror" : "Nyalakan Efek Mirror"}
             >
-              <FlipHorizontal className={`w-4 h-4 transition-transform duration-300 ${isMirrored ? "text-emerald-400" : ""}`} />
+              <FlipHorizontal className={`w-4 h-4 transition-transform duration-300 ${getMirrored() ? "text-emerald-400" : ""}`} />
             </button>
           )}
 
-          {isCameraActive && isHolding && (
+          {getCameraActive() && getHolding() && (
             <button
               id="btn-resume-hold"
-              onClick={() => setResumeCountdown(3)}
+              onClick={handleResumeHoldBtn}
               className="w-10 h-10 flex items-center justify-center rounded-none border transition active:scale-95 shadow-lg bg-amber-500 text-neutral-950 border-amber-400 hover:bg-amber-400 animate-pulse"
               title="Lanjutkan dari Tag Hold"
             >
@@ -1006,18 +1080,18 @@ export default function App() {
             </button>
           )}
 
-          {isCameraActive && (
+          {getCameraActive() && (
             <button
               id="btn-toggle-record"
-              onClick={isRecording ? stopRecording : () => setCountdown(3)}
+              onClick={handleRecordBtn}
               className={`w-10 h-10 flex items-center justify-center rounded-none border transition active:scale-95 shadow-lg ${
-                isRecording
+                getRecording()
                   ? "bg-red-600 text-white border-red-500 hover:bg-red-500 animate-pulse"
                   : "bg-emerald-600 text-white border-emerald-500 hover:bg-emerald-500"
               }`}
-              title={isRecording ? "Stop Perekaman" : "Mulai Rekam Video"}
+              title={getRecording() ? "Stop Perekaman" : "Mulai Rekam Video"}
             >
-              {isRecording ? (
+              {getRecording() ? (
                 <Square className="w-4 h-4 fill-current" />
               ) : (
                 <Circle className="w-4 h-4 fill-current" />
@@ -1027,16 +1101,17 @@ export default function App() {
 
           <button
             id="btn-toggle-camera"
-            onClick={toggleCameraMode}
+            onClick={handleCameraBtn}
             className={`w-10 h-10 flex items-center justify-center rounded-none border transition active:scale-95 ${
-              isCameraActive 
+              getCameraActive() 
                 ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/30"
                 : "bg-neutral-900 border-neutral-700 text-neutral-200 hover:bg-neutral-800 hover:text-white"
             }`}
-            title={isCameraActive ? "Matikan Kamera" : "Aktifkan Kamera"}
+            title={getCameraActive() ? "Matikan Kamera" : "Aktifkan Kamera"}
           >
-            {isCameraActive ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
+            {getCameraActive() ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
           </button>
+
 
           {/* [UI-NONPROGRAMMER] Tombol aksi layar penuh. Ubah warna hover pada 'hover:bg-neutral-800' jika perlu. */}
           <button

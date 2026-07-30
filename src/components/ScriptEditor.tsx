@@ -384,9 +384,9 @@ export default function ScriptEditor({
           </span>
           <div className="grid grid-cols-3 gap-2">
             {[
-              { mode: PrompterMode.WORD, label: "Word-by-Word" },
-              { mode: PrompterMode.PHRASE, label: "Frasa (Clause)" },
-              { mode: PrompterMode.TICKER, label: "Ticker Teks" }
+              { mode: PrompterMode.WORD, label: "Word-by-Word", desc: "Tampilkan kata demi kata" },
+              { mode: PrompterMode.PHRASE, label: "Frasa (Clause)", desc: "Tampilkan per frasa natural" },
+              { mode: PrompterMode.TICKER, label: "Ticker Teks", desc: "Gulir teks seperti berita" }
             ].map((item) => (
               <button
                 key={item.mode}

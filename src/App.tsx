@@ -31,8 +31,12 @@ import {
   Square,
   Download,
   X,
-  FlipHorizontal
+  FlipHorizontal,
+  Cast,
+  Heart,
+  Coffee
 } from "lucide-react";
+import qrCodeImg from '../assets/qrcode.jfif';
 
 import { PrompterMode, VisualConfig, PunctuationDurations, VideoConfig } from "./types";
 import { parseScript, groupWordsIntoPhrases, formatTime, DEFAULT_PUNCTUATION_DURATIONS } from "./lib/parser";
@@ -158,6 +162,7 @@ export default function App() {
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [showRestartDialog, setShowRestartDialog] = useState(false);
   const [showVideoConfigModal, setShowVideoConfigModal] = useState(false);
+  const [showAboutModal, setShowAboutModal] = useState(false);
   const [videoConfig, setVideoConfig] = useState<VideoConfig>(() => {
     const saved = localStorage.getItem("rhythm_video_config");
     return saved ? JSON.parse(saved) : { codec: "webm", fps: 30, ratio: "16:9" };
@@ -1202,14 +1207,22 @@ export default function App() {
 
             {/* PREMO Mode Actions in Header */}
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowAboutModal(true)}
+                className="w-8 h-8 flex items-center justify-center rounded-none bg-neutral-900 border border-neutral-700 hover:bg-neutral-800 text-neutral-400 hover:text-neutral-200 transition active:scale-95 shadow"
+                title="Tentang RePrompter"
+              >
+                <Info className="w-4 h-4" />
+              </button>
+
               {premoRole === "none" && (
                 <button
                   id="btn-premo-setup"
                   onClick={() => setPremoShowSetup(true)}
-                  className="px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider bg-purple-950/40 hover:bg-purple-900/60 text-purple-300 hover:text-purple-200 border border-purple-850 hover:border-purple-700 transition flex items-center gap-2 active:scale-95 cursor-pointer shadow"
+                  className="w-8 h-8 flex items-center justify-center rounded-none bg-purple-950/40 hover:bg-purple-900/60 text-purple-300 hover:text-purple-200 border border-purple-850 hover:border-purple-700 transition active:scale-95 shadow"
+                  title="PREMO Mode (Previewer & Monitor)"
                 >
-                  <span className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-pulse" />
-                  PREMO Mode
+                  <Cast className="w-4 h-4" />
                 </button>
               )}
 
@@ -2034,6 +2047,79 @@ export default function App() {
               >
                 <Download className="w-4 h-4" /> Unduh Video
               </a>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ABOUT MODAL */}
+      {showAboutModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-[#09090b] border border-neutral-800 shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="p-6 border-b border-neutral-800 flex justify-between items-center bg-neutral-900/50">
+              <h2 className="text-xl font-bold text-neutral-100 flex items-center gap-2">
+                <Info className="w-5 h-5 text-emerald-400" />
+                Tentang RePrompter
+              </h2>
+              <button 
+                onClick={() => setShowAboutModal(false)}
+                className="text-neutral-500 hover:text-neutral-200 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            {/* Body */}
+            <div className="p-6 space-y-6">
+              <div className="text-center space-y-2">
+                <div className="w-20 h-20 bg-emerald-500/10 rounded-none border border-emerald-500/30 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-emerald-500/10">
+                  <Cast className="w-10 h-10 text-emerald-400" />
+                </div>
+                <h3 className="text-2xl font-black tracking-tight text-white">RePrompter</h3>
+                <p className="text-sm text-neutral-400">Versi 1.1.0 &bull; Dibangun dengan React & TailwindCSS</p>
+                <p className="text-xs text-neutral-500 font-bold tracking-wider uppercase mt-1">Pembaruan Terakhir: Juli 2026</p>
+              </div>
+
+              <div className="bg-neutral-900 p-5 border border-neutral-800 space-y-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-500 border-b border-neutral-800 pb-2">Dikembangkan Oleh</h4>
+                <p className="text-lg font-black text-emerald-400">Fatih Farhat Asshidiq</p>
+                <p className="text-sm text-neutral-400 leading-relaxed">
+                  Saya membangun aplikasi ini secara independen untuk membantu para pembuat konten, penyiar, dan presenter agar dapat membaca naskah dengan lebih mudah dan profesional tanpa harus membeli alat mahal. Aplikasi ini 100% gratis dan berjalan langsung di peramban Anda.
+                </p>
+                <div className="pt-2">
+                  <a href="mailto:kazokuhairy@gmail.com" className="text-xs text-emerald-400 hover:text-emerald-300 transition font-bold uppercase tracking-wider underline decoration-emerald-500/30 underline-offset-4">
+                    Kirim Kritik & Saran (kazokuhairy@gmail.com)
+                  </a>
+                </div>
+              </div>
+
+              <div className="space-y-4 pt-2">
+                <div className="text-center space-y-2">
+                  <h4 className="text-sm font-bold text-neutral-200 flex items-center justify-center gap-2">
+                    <Heart className="w-4 h-4 text-rose-500 fill-current" />
+                    Dukung Pengembangan
+                  </h4>
+                  <p className="text-xs text-neutral-400 leading-relaxed px-4">
+                    Jika aplikasi ini membantu alur kerja Anda, pertimbangkan untuk mentraktir saya segelas kopi. Dukungan Anda membantu saya menjaga aplikasi ini tetap bebas iklan dan terus dikembangkan!
+                  </p>
+                </div>
+
+                <div className="bg-white p-3 w-48 h-48 mx-auto relative group shadow-2xl">
+                  <img src={qrCodeImg} alt="QR Code Donasi" className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-black/70 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
+                    <a 
+                      href={qrCodeImg} 
+                      download="RePrompter_Donation_QR.jfif"
+                      className="flex flex-col items-center gap-2 text-white hover:text-emerald-400 transition"
+                    >
+                      <Download className="w-8 h-8" />
+                      <span className="text-xs font-bold uppercase tracking-wider">Unduh QR</span>
+                    </a>
+                  </div>
+                </div>
+                <p className="text-center text-[10px] text-neutral-500 uppercase tracking-widest font-bold">Pindai kode QR untuk berdonasi</p>
+              </div>
             </div>
           </div>
         </div>
